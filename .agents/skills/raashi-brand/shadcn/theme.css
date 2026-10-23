@@ -1,0 +1,45 @@
+/* Raashi Cognitive Technologies — Shadcn Custom Theme CSS */
+
+:root {
+  --background: 210 40% 98%;      /* Surface #F8FAFC */
+  --foreground: 226 61% 23%;      /* Dark Navy #17285E */
+  
+  --card: 0 0% 100%;              /* White #FFFFFF */
+  --card-foreground: 226 61% 23%; /* Dark Navy #17285E */
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 226 61% 23%;
+
+  --primary: 215 96% 45%;          /* Primary Blue #0560DF */
+  --primary-foreground: 0 0% 100%; /* White */
+
+  --secondary: 226 84% 34%;        /* Royal Blue #0E2F9D */
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 210 40% 98%;
+  --muted-foreground: 226 25% 45%;
+
+  --accent: 16 95% 52%;            /* Orange #F94F0E */
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 2 84% 54%;        /* Red #EE3128 */
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 226 61% 23% / 0.08;
+  --input: 226 61% 23% / 0.12;
+  --ring: 215 96% 45%;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+}
+
+/* Base UI Component Focus States */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px #0560DF;
+}

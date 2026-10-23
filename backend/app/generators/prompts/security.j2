@@ -1,0 +1,79 @@
+Endpoint: {{ endpoint.method }} {{ endpoint.path }}
+Operation: {{ endpoint.operation | tojson(indent=2) }}
+
+Auth Config: {{ spec.security | tojson if spec.security else "none" }}
+Security Schemes: {{ spec.components.securitySchemes | tojson if spec.components and spec.components.securitySchemes else "none" }}
+
+Generate OWASP API Top 10 2023 security test cases. Cover relevant categories for this endpoint:
+
+1. **API1: Broken Object Level Authorization (Bola)** - IDOR probes using other users' resource IDs
+2. **API2: Broken Authentication** - Token replay, weak tokens, missing auth, auth bypass
+3. **API3: Broken Object Property Level Authorization (BOPLA)** - Mass assignment, excessive data exposure
+4. **API4: Unrestricted Resource Consumption** - Pagination abuse, large payloads, DoS vectors
+5. **API5: Broken Function Level Authorization (BFLA)** - Admin endpoints accessed as regular user
+6. **API6: Unrestricted Access to Sensitive Business Flows** - Business logic bypass
+7. **API7: Server Side Request Forgery (SSRF)** - URL parameter injection
+8. **API8: Security Misconfiguration** - Debug endpoints, verbose errors, CORS issues
+9. **API9: Improper Inventory Management** - Version discovery, deprecated endpoints
+10. **API10: Unsafe Consumption of APIs** - Third-party service injection
+
+Only generate tests relevant to this endpoint's functionality and parameters.
+
+Output JSON schema:
+{
+  "type": "object",
+  "properties": {
+    "test_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subcategory": {"type": "string", "enum": ["bola", "broken_auth", "bopla", "resource_consumption", "bfla", "business_flow", "ssrf", "misconfiguration", "inventory", "unsafe_consumption"]},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "request": {
+            "type": "object",
+            "properties": {
+              "method": {"type": "string"},
+              "path": {"type": "string"},
+              "headers": {"type": "object"},
+              "query_params": {"type": "object"},
+              "body": {}
+            },
+            "required": ["method", "path"]
+          },
+          "expected": {
+            "type": "object",
+            "properties": {
+              "status_code": {"type": "integer"},
+              "response_schema": {"type": "object"},
+              "assertions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {"type": "string"},
+                    "path": {"type": "string"},
+                    "operator": {"type": "string"},
+                    "value": {}
+                  },
+                  "required": ["type", "path", "operator"]
+                }
+              }
+            },
+            "required": ["status_code"]
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "owasp_category": {"type": ["string", "null"]},
+              "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]}
+            }
+          }
+        },
+        "required": ["subcategory", "title", "description", "request", "expected", "metadata"]
+      }
+    }
+  },
+  "required": ["test_cases"]
+}

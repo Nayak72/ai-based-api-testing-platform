@@ -1,0 +1,80 @@
+Endpoint: {{ endpoint.method }} {{ endpoint.path }}
+Operation: {{ endpoint.operation | tojson(indent=2) }}
+
+Parameter Schemas:
+{% for param in endpoint.operation.parameters %}
+- {{ param.in }}: {{ param.name }} ({{ param.schema.type if param.schema else "unknown" }}) {% if param.required %}required{% endif %} {% if param.schema and param.schema.format %}{{ param.schema.format }}{% endif %} {% if param.schema and param.schema.enum %}enum: {{ param.schema.enum }}{% endif %} {% if param.schema and param.schema.minimum is defined %}min: {{ param.schema.minimum }}{% endif %} {% if param.schema and param.schema.maximum is defined %}max: {{ param.schema.maximum }}{% endif %} {% if param.schema and param.schema.minLength is defined %}minLength: {{ param.schema.minLength }}{% endif %} {% if param.schema and param.schema.maxLength is defined %}maxLength: {{ param.schema.maxLength }}{% endif %} {% if param.schema and param.schema.minItems is defined %}minItems: {{ param.schema.minItems }}{% endif %} {% if param.schema and param.schema.maxItems is defined %}maxItems: {{ param.schema.maxItems }}{% endif %}
+{% endfor %}
+
+{% if endpoint.operation.requestBody %}
+Request Body:
+{% for content_type, content in endpoint.operation.requestBody.content.items() %}
+{{ content.schema | tojson(indent=2) }}
+{% endfor %}
+{% endif %}
+
+Generate edge/boundary test cases. Cover:
+1. Boundary values (min, max, min-1, max+1 for numbers)
+2. String length boundaries (minLength, maxLength, empty string)
+3. Array size boundaries (minItems, maxItems, empty array)
+4. Date/time edge cases (leap year, timezone, RFC3339 variants)
+5. Numeric precision (float vs integer, scientific notation)
+
+Output JSON schema:
+{
+  "type": "object",
+  "properties": {
+    "test_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subcategory": {"type": "string", "enum": ["boundary_values", "string_length", "array_size", "datetime_edge", "numeric_precision"]},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "request": {
+            "type": "object",
+            "properties": {
+              "method": {"type": "string"},
+              "path": {"type": "string"},
+              "headers": {"type": "object"},
+              "query_params": {"type": "object"},
+              "body": {}
+            },
+            "required": ["method", "path"]
+          },
+          "expected": {
+            "type": "object",
+            "properties": {
+              "status_code": {"type": "integer"},
+              "response_schema": {"type": "object"},
+              "assertions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {"type": "string"},
+                    "path": {"type": "string"},
+                    "operator": {"type": "string"},
+                    "value": {}
+                  },
+                  "required": ["type", "path", "operator"]
+                }
+              }
+            },
+            "required": ["status_code"]
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "owasp_category": {"type": ["string", "null"]},
+              "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]}
+            }
+          }
+        },
+        "required": ["subcategory", "title", "description", "request", "expected", "metadata"]
+      }
+    }
+  },
+  "required": ["test_cases"]
+}

@@ -1,0 +1,61 @@
+{
+  "brand": "Raashi Cognitive Technologies Pvt. Ltd.",
+  "tagline": "Transforming Knowledge into Intelligent Solutions",
+  "colors": {
+    "primaryBlue": {
+      "hex": "#0560DF",
+      "rgb": "5, 96, 223",
+      "hsl": "hsl(215, 96%, 45%)",
+      "usage": "Main CTA buttons, active state, brand accent"
+    },
+    "royalBlue": {
+      "hex": "#0E2F9D",
+      "rgb": "14, 47, 157",
+      "hsl": "hsl(226, 84%, 34%)",
+      "usage": "Hover states, focused borders"
+    },
+    "darkNavy": {
+      "hex": "#17285E",
+      "rgb": "23, 40, 94",
+      "hsl": "hsl(226, 61%, 23%)",
+      "usage": "Primary headings, high-contrast text, dark mode cards"
+    },
+    "orange": {
+      "hex": "#F94F0E",
+      "rgb": "249, 79, 14",
+      "hsl": "hsl(16, 95%, 52%)",
+      "usage": "Secondary highlights, accent pills, alert badges"
+    },
+    "red": {
+      "hex": "#EE3128",
+      "rgb": "238, 49, 40",
+      "hsl": "hsl(2, 84%, 54%)",
+      "usage": "Danger actions, error states, cognitive gradient node"
+    },
+    "magenta": {
+      "hex": "#D11753",
+      "rgb": "209, 23, 83",
+      "hsl": "hsl(341, 80%, 46%)",
+      "usage": "Cognitive gradient middle node"
+    },
+    "white": {
+      "hex": "#FFFFFF",
+      "rgb": "255, 255, 255",
+      "hsl": "hsl(0, 0%, 100%)",
+      "usage": "Card fills, canvas white, light text"
+    },
+    "surface": {
+      "hex": "#F8FAFC",
+      "rgb": "248, 250, 252",
+      "hsl": "hsl(210, 40%, 98%)",
+      "usage": "Page background canvas"
+    }
+  },
+  "gradients": {
+    "primaryCognitive": "linear-gradient(135deg, #0560DF 0%, #7A1FD0 50%, #EE3128 100%)",
+    "secondaryMotion": "linear-gradient(135deg, #0560DF 0%, #F94F0E 100%)"
+  },
+  "prohibitedColors": [
+    "green", "yellow", "teal", "cyan", "lime", "amber", "random purple", "random pink", "neon"
+  ]
+}

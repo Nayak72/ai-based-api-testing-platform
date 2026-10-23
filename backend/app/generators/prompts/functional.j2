@@ -1,0 +1,71 @@
+Endpoint: {{ endpoint.method }} {{ endpoint.path }}
+Operation: {{ endpoint.operation | tojson(indent=2) }}
+
+Spec Context:
+- Base URL: {{ spec.servers[0].url if spec.servers else "/" }}
+- Security Schemes: {{ spec.components.securitySchemes | tojson if spec.components and spec.components.securitySchemes else "none" }}
+
+Generate functional test cases for this endpoint. Cover:
+1. Happy path with valid required parameters
+2. Optional parameter combinations
+3. Valid enum values for parameters
+4. Pagination/filtering variants (if applicable)
+
+Output JSON schema:
+{
+  "type": "object",
+  "properties": {
+    "test_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subcategory": {"type": "string", "enum": ["happy_path", "optional_params", "enum_values", "pagination"]},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "request": {
+            "type": "object",
+            "properties": {
+              "method": {"type": "string"},
+              "path": {"type": "string"},
+              "headers": {"type": "object"},
+              "query_params": {"type": "object"},
+              "body": {}
+            },
+            "required": ["method", "path"]
+          },
+          "expected": {
+            "type": "object",
+            "properties": {
+              "status_code": {"type": "integer"},
+              "response_schema": {"type": "object"},
+              "assertions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {"type": "string"},
+                    "path": {"type": "string"},
+                    "operator": {"type": "string"},
+                    "value": {}
+                  },
+                  "required": ["type", "path", "operator"]
+                }
+              }
+            },
+            "required": ["status_code"]
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "owasp_category": {"type": ["string", "null"]},
+              "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]}
+            }
+          }
+        },
+        "required": ["subcategory", "title", "description", "request", "expected", "metadata"]
+      }
+    }
+  },
+  "required": ["test_cases"]
+}

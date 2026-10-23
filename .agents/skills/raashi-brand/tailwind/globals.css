@@ -1,0 +1,56 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+@layer base {
+  :root {
+    --background: 210 40% 98%; /* #F8FAFC */
+    --foreground: 226 61% 23%; /* #17285E Dark Navy */
+
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 226 61% 23%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 226 61% 23%;
+
+    --primary: 215 96% 45%; /* #0560DF Primary Blue */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 100%;
+    --secondary-foreground: 226 61% 23%;
+
+    --muted: 210 40% 98%;
+    --muted-foreground: 226 30% 45%;
+
+    --accent: 16 95% 52%; /* #F94F0E Orange */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 2 84% 54%; /* #EE3128 Red */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 226 61% 23% / 0.08;
+    --input: 226 61% 23% / 0.12;
+    --ring: 215 96% 45%;
+
+    --radius: 0.75rem; /* 12px */
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Inter', 'Plus Jakarta Sans', 'Manrope', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.text-gradient-cognitive {
+  background: linear-gradient(135deg, #0560DF 0%, #7A1FD0 50%, #EE3128 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-motion {
+  background: linear-gradient(135deg, #0560DF 0%, #F94F0E 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
