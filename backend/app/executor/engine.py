@@ -82,15 +82,20 @@ class TestExecutor:
     async def _execute_with_retry(self, test_case: TestCaseInDB, run_context: "RunContext") -> TestResultBase:
         from app.executor.assertions import evaluate_assertions
 
-        base_url = run_context.config.base_url_override or test_case.request.headers.get("x-base-url", "") or ""
-        if not base_url and hasattr(test_case, "spec") and test_case.spec:
-            base_url = test_case.spec.base_url or ""
+        base_url = (
+            run_context.config.base_url_override
+            or run_context.config.spec_base_url
+            or test_case.request.headers.get("x-base-url", "")
+            or ""
+        )
+        if not base_url:
+            base_url = ""
 
         url = f"{base_url.rstrip('/')}{test_case.request.path}"
         headers = dict(test_case.request.headers)
         query_params = dict(test_case.request.query_params)
 
-        auth_config = run_context.config.auth_override or (test_case.spec.auth_config if hasattr(test_case, "spec") else None)
+        auth_config = run_context.config.auth_override or run_context.config.spec_auth_config
         if auth_config and auth_config.token_env_var:
             import os
             token = os.environ.get(auth_config.token_env_var)
@@ -136,6 +141,7 @@ class TestExecutor:
                     response.headers,
                     response_data,
                     test_case.expected.response_schema,
+                    test_case.expected.status_code,
                 )
 
                 status = "passed" if all(a.result for a in assertions) else "failed"

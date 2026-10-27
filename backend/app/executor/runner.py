@@ -56,6 +56,18 @@ class RunOrchestrator:
             logger.error("Run not found", run_id=run_id)
             return
 
+        # Fetch spec to get base_url and auth_config for execution context
+        from app.db.repositories import spec_repository
+        spec = await spec_repository.get_by_id(run.spec_id, user_obj_id)
+        if spec:
+            # Update run config with spec's base_url and auth_config if not overridden
+            if not run.config.base_url_override and spec.base_url:
+                run.config.spec_base_url = spec.base_url
+            if not run.config.auth_override and spec.auth_config:
+                run.config.spec_auth_config = spec.auth_config
+            # Persist updated config
+            await run_repository.update_config(run_obj_id, run.config)
+
         await run_repository.update_status(run_obj_id, "running")
         run = await run_repository.get_by_id(run_obj_id, user_obj_id)
 

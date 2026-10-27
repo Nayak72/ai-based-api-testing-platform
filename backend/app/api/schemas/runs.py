@@ -15,6 +15,8 @@ class RunConfigSchema(BaseModel):
     categories: list[str] = ["functional", "edge", "malformed", "security"]
     base_url_override: str | None = None
     auth_override: AuthConfigSchema | None = None
+    spec_base_url: str | None = None
+    spec_auth_config: AuthConfigSchema | None = None
 
 
 class RunSummarySchema(BaseModel):

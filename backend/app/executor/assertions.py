@@ -16,8 +16,15 @@ def evaluate_assertions(
     headers: dict,
     body: str | None,
     response_schema: dict | None = None,
+    expected_status_code: int | None = None,
 ) -> list[AssertionResult]:
     results = []
+
+    # Always evaluate status code if expected_status_code is provided
+    if expected_status_code is not None:
+        status_assertion = Assertion(type="status_code", path="", operator="eq", value=expected_status_code)
+        result = _evaluate_single_assertion(status_assertion, status_code, headers, body, response_schema)
+        results.append(AssertionResult(assertion=status_assertion, result=result))
 
     for assertion in assertions:
         try:

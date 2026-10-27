@@ -74,5 +74,11 @@ class RunRepository:
             {"_id": run_id}, {"$set": {"summary.duration_seconds": duration_seconds}}
         )
 
+    async def update_config(self, run_id: ObjectId, config) -> TestRunInDB | None:
+        result = await self.collection.find_one_and_update(
+            {"_id": run_id}, {"$set": {"config": config.model_dump()}}, return_document=True
+        )
+        return TestRunInDB(**result) if result else None
+
 
 run_repository = RunRepository()

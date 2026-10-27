@@ -196,6 +196,8 @@ class RunConfig(BaseModel):
     categories: list[str] = Field(default_factory=lambda: ["functional", "edge", "malformed", "security"])
     base_url_override: str | None = None
     auth_override: AuthConfig | None = None
+    spec_base_url: str | None = None
+    spec_auth_config: AuthConfig | None = None
 
 
 class RunSummary(BaseModel):

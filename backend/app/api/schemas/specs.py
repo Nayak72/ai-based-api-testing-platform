@@ -13,6 +13,7 @@ class SpecUploadRequest(BaseModel):
     source_type: str = Field(pattern="^(openapi|postman)$")
     source_format: str = Field(pattern="^(yaml|json)$")
     auth_config: AuthConfigSchema | None = None
+    raw_content: str
 
 
 class SpecResponse(BaseModel):

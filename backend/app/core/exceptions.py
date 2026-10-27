@@ -1,10 +1,27 @@
+import json
+from typing import Any
+
 import structlog
+from bson import ObjectId
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError as PydanticValidationError
 
 logger = structlog.get_logger()
+
+
+def _make_json_serializable(obj: Any) -> Any:
+    """Recursively convert objects to JSON-serializable form."""
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {k: _make_json_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_make_json_serializable(v) for v in obj]
+    if hasattr(obj, "__dict__"):
+        return _make_json_serializable(obj.__dict__)
+    return obj
 
 
 class AppException(Exception):
@@ -64,18 +81,20 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    logger.warning("Validation error", path=request.url.path, errors=exc.errors())
+    safe_errors = _make_json_serializable(exc.errors())
+    logger.warning("Validation error", path=request.url.path, errors=safe_errors)
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"error": "Validation error", "details": exc.errors()},
+        content={"error": "Validation error", "details": safe_errors},
     )
 
 
 async def pydantic_validation_exception_handler(request: Request, exc: PydanticValidationError) -> JSONResponse:
-    logger.warning("Pydantic validation error", path=request.url.path, errors=exc.errors())
+    safe_errors = _make_json_serializable(exc.errors())
+    logger.warning("Pydantic validation error", path=request.url.path, errors=safe_errors)
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"error": "Validation error", "details": exc.errors()},
+        content={"error": "Validation error", "details": safe_errors},
     )
 
 

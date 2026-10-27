@@ -54,14 +54,10 @@ async def upload_spec(
         source_type=source_type,
         source_format=source_format,
         auth_config=auth_config,
+        raw_content=raw_content,
     )
 
     spec = await spec_repository.create(spec_create, user_id, spec_hash)
-
-    await spec_repository.collection.update_one(
-        {"_id": spec.id},
-        {"$set": {"raw_content": raw_content}},
-    )
 
     logger.info("Spec uploaded", spec_id=str(spec.id), user_id=str(user_id))
 
