@@ -31,13 +31,40 @@ async def run_agentic_pipeline(state: SessionState) -> SessionState:
     try:
         state = await IngestAgent().run(state)
         if state.get("errors"):
+            err_msg = "; ".join(state["errors"])
             await get_collection("sessions").update_one(
                 {"_id": ObjectId(session_id)},
-                {"$set": {"status": "failed", "error": str(state["errors"])}},
+                {"$set": {"status": "failed", "error": err_msg}},
+            )
+            await publish(
+                AgentEvent(
+                    session_id=session_id,
+                    agent="orchestrator",
+                    step="session_error",
+                    status="failed",
+                    message=f"Pipeline error: {err_msg}",
+                )
             )
             return state
 
         state = await PlannerAgent().run(state)
+        if state.get("errors"):
+            err_msg = "; ".join(state["errors"])
+            await get_collection("sessions").update_one(
+                {"_id": ObjectId(session_id)},
+                {"$set": {"status": "failed", "error": err_msg}},
+            )
+            await publish(
+                AgentEvent(
+                    session_id=session_id,
+                    agent="orchestrator",
+                    step="session_error",
+                    status="failed",
+                    message=f"Pipeline error: {err_msg}",
+                )
+            )
+            return state
+
         # Update session with plan and waiting_human=True
         await get_collection("sessions").update_one(
             {"_id": ObjectId(session_id)},

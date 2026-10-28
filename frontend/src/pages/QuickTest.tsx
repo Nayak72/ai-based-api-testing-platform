@@ -25,9 +25,20 @@ export function QuickTest() {
   const [response, setResponse] = useState<QuickTestResponse | null>(null)
 
   const handleExecute = async () => {
-    if (!url.trim()) {
+    let cleanUrl = url.trim().replace(/^['"]|['"]$/g, '')
+    if (!cleanUrl) {
       toast.error('URL is required')
       return
+    }
+
+    // Auto-normalize protocol if omitted
+    if (!/^https?:\/\//i.test(cleanUrl)) {
+      if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0|host\.docker\.internal)(:\d+)?(\/.*)?$/i.test(cleanUrl)) {
+        cleanUrl = `http://${cleanUrl}`
+      } else {
+        cleanUrl = `https://${cleanUrl}`
+      }
+      setUrl(cleanUrl)
     }
 
     let parsedHeaders: Record<string, string> = {}
@@ -54,13 +65,13 @@ export function QuickTest() {
     setResponse(null)
     try {
       const res = await quickTestApi.test({
-        url,
+        url: cleanUrl,
         method,
         mode,
         headers: parsedHeaders,
         body: parsedBody,
         auth_type: authType === 'none' ? undefined : authType,
-        auth_token: authToken || undefined,
+        auth_token: authToken.trim() || undefined,
       })
       setResponse(res.data)
       if (res.data.status_code >= 200 && res.data.status_code < 400) {
@@ -139,7 +150,7 @@ export function QuickTest() {
             type="button"
             onClick={() => {
               setMode('local')
-              if (url.includes('jsonplaceholder')) setUrl('http://localhost:8001/products')
+              if (url.includes('jsonplaceholder') || url.includes('agify')) setUrl('http://localhost:8001/products')
             }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-8 text-xs font-medium transition-all ${
               mode === 'local'
@@ -154,7 +165,7 @@ export function QuickTest() {
             type="button"
             onClick={() => {
               setMode('online')
-              if (url.includes('localhost')) setUrl('https://jsonplaceholder.typicode.com/posts/1')
+              if (url.includes('localhost') || url.includes('127.0.0.1')) setUrl('https://api.agify.io?name=meelad')
             }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-8 text-xs font-medium transition-all ${
               mode === 'online'

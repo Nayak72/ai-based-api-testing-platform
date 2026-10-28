@@ -80,3 +80,10 @@ python_functions = ["test_*"]
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "eval*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.html", "*.j2", "*.json", "*.md"]

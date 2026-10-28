@@ -139,7 +139,7 @@ class APISpecBase(BaseModel):
     name: str
     source_type: str = "openapi"
     source_format: str = "yaml"
-    raw_content: str
+    raw_content: str = ""
     auth_config: AuthConfig | None = None
 
 
@@ -150,8 +150,9 @@ class APISpecCreate(APISpecBase):
 class APISpecInDB(APISpecBase):
     id: PyObjectId = Field(alias="_id")
     user_id: PyObjectId
+    raw_content: str = ""
     parsed_spec: dict | None = None
-    spec_hash: str
+    spec_hash: str = ""
     endpoints_count: int = 0
     spec_version: str | None = None
     base_url: str | None = None

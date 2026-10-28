@@ -1,4 +1,5 @@
 import hashlib
+
 import httpx
 import structlog
 from bson import ObjectId
@@ -6,6 +7,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, sta
 
 from app.api.deps import CurrentUserId
 from app.api.schemas.specs import (
+    AuthConfigSchema,
     EndpointInfo,
     EndpointListResponse,
     SpecDetailResponse,
@@ -121,6 +123,14 @@ async def get_spec(spec_id: str, user_id: CurrentUserId):
     if not spec:
         raise HTTPException(status_code=404, detail="Spec not found")
 
+    # Safely convert auth_config (strips sensitive `token` field)
+    auth_config_schema = None
+    if spec.auth_config:
+        auth_config_schema = AuthConfigSchema(
+            type=spec.auth_config.type,
+            token_env_var=spec.auth_config.token_env_var,
+        )
+
     return SpecDetailResponse(
         id=str(spec.id),
         name=spec.name,
@@ -135,7 +145,7 @@ async def get_spec(spec_id: str, user_id: CurrentUserId):
         updated_at=spec.updated_at,
         raw_content=spec.raw_content,
         parsed_spec=spec.parsed_spec,
-        auth_config=spec.auth_config,
+        auth_config=auth_config_schema,
     )
 
 
@@ -196,8 +206,27 @@ async def list_endpoints(spec_id: str, user_id: CurrentUserId):
     if not spec:
         raise HTTPException(status_code=404, detail="Spec not found")
 
+    # Auto-parse if raw_content is available but spec was never parsed
+    if (spec.status != "ready" or not spec.parsed_spec) and spec.raw_content:
+        logger.info("Auto-parsing spec on endpoints request", spec_id=spec_id)
+        try:
+            await spec_repository.update_status(obj_id, "parsing")
+            if spec.source_type == "openapi":
+                parsed, eps, version, base_url = await parse_openapi_spec(spec.raw_content)
+            else:
+                parsed, eps, version, base_url = await parse_postman_collection(spec.raw_content)
+            await spec_repository.update_parsed(obj_id, parsed, len(eps), version, base_url)
+            spec = await spec_repository.get_by_id(obj_id, user_id)
+        except Exception as e:
+            await spec_repository.update_status(obj_id, "error", str(e))
+            logger.error("Auto-parse failed", spec_id=spec_id, error=str(e))
+            raise HTTPException(status_code=400, detail=f"Spec parse failed: {e!s}")
+
     if spec.status != "ready" or not spec.parsed_spec:
-        raise HTTPException(status_code=400, detail="Spec not parsed yet")
+        raise HTTPException(
+            status_code=400,
+            detail="Spec not parsed yet. Upload raw content first or trigger /parse.",
+        )
 
     endpoints_data = extract_endpoints(spec.parsed_spec)
     endpoints = []

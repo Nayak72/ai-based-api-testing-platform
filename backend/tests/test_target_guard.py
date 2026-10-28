@@ -53,3 +53,13 @@ def test_owned_allowlist():
     guard = TargetGuard(mode=RunMode.ONLINE, owned_allowlist=["myapi.internal.example.com"])
     ok, _ = guard.check_url("https://myapi.internal.example.com/api")
     assert ok
+
+
+def test_url_whitespace_and_auto_protocol(local_guard):
+    # Leading whitespace and quotes
+    ok, _ = local_guard.check_url("  http://localhost:8080/api  ")
+    assert ok
+
+    # Auto-protocol for localhost
+    ok2, _ = local_guard.check_url("localhost:8080/api")
+    assert ok2

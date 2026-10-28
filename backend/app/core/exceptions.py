@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from typing import Any
 
 import structlog
@@ -12,15 +13,19 @@ logger = structlog.get_logger()
 
 def _make_json_serializable(obj: Any) -> Any:
     """Recursively convert objects to JSON-serializable form."""
+    if obj is None or isinstance(obj, (int, float, bool, str)):
+        return obj
     if isinstance(obj, ObjectId):
         return str(obj)
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
     if isinstance(obj, dict):
-        return {k: _make_json_serializable(v) for k, v in obj.items()}
+        return {str(k): _make_json_serializable(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple, set)):
         return [_make_json_serializable(v) for v in obj]
     if hasattr(obj, "__dict__"):
         return _make_json_serializable(obj.__dict__)
-    return obj
+    return str(obj)
 
 
 class AppException(Exception):

@@ -147,3 +147,42 @@ def test_health_check():
     data = response.json()
     assert data["status"] == "healthy"
     assert "version" in data
+
+
+def test_api_spec_in_db_legacy_compatibility():
+    from app.db.models import APISpecInDB
+
+    legacy_doc = {
+        "_id": ObjectId(),
+        "user_id": ObjectId(),
+        "name": "legacy-openapi-spec",
+    }
+    spec = APISpecInDB(**legacy_doc)
+    assert spec.name == "legacy-openapi-spec"
+    assert spec.raw_content == ""
+    assert spec.spec_hash == ""
+    assert spec.endpoints_count == 0
+
+
+def test_make_json_serializable_handles_datetimes_and_objects():
+    import json
+    from datetime import date, datetime
+    from app.core.exceptions import _make_json_serializable
+
+    now = datetime.now()
+    today = date.today()
+    oid = ObjectId()
+
+    payload = {
+        "id": oid,
+        "created_at": now,
+        "date": today,
+        "items": [1, "two", {"oid": oid, "dt": now}],
+        "custom": object(),
+    }
+
+    serialized = _make_json_serializable(payload)
+    dumped = json.dumps(serialized)
+    assert str(oid) in dumped
+    assert now.isoformat() in dumped
+    assert today.isoformat() in dumped

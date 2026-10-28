@@ -226,16 +226,22 @@ export const reportsApi = {
 export interface ProviderProfile {
   id: string
   name: string
-  provider_type: 'openrouter' | 'nim' | 'ollama' | 'lmstudio' | 'llamacpp' | 'openai_compatible'
+  preset?: string
+  provider_type?: 'openrouter' | 'nim' | 'ollama' | 'lmstudio' | 'llamacpp' | 'openai_compatible'
   base_url: string
-  default_model: string
+  model: string
+  default_model?: string
   has_key: boolean
-  is_active: boolean
+  is_default?: boolean
   created_at: string
 }
 
+export interface ProvidersListResponse {
+  providers: ProviderProfile[]
+}
+
 export const providersApi = {
-  list: () => api.get<ProviderProfile[]>('/providers'),
+  list: () => api.get<ProvidersListResponse>('/providers'),
   create: (data: { name: string; provider_type: string; base_url: string; default_model: string; api_key?: string }) =>
     api.post<ProviderProfile>('/providers', data),
   update: (id: string, data: Partial<{ name: string; base_url: string; default_model: string; api_key?: string; is_active: boolean }>) =>

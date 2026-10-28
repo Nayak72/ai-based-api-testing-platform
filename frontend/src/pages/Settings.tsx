@@ -53,7 +53,10 @@ export function Settings() {
     setLoadingProfiles(true)
     try {
       const res = await providersApi.list()
-      setProfiles(res.data || [])
+      const list: ProviderProfile[] = Array.isArray(res.data)
+        ? res.data
+        : (res.data as any)?.providers ?? []
+      setProfiles(list)
     } catch {
       toast.error('Failed to load provider profiles')
     } finally {

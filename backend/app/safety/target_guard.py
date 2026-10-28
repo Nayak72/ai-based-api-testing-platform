@@ -64,6 +64,17 @@ class TargetGuard:
         allowlist: set[str] = frozenset(),
     ) -> GuardDecision:
         """Return a GuardDecision for the given URL and policy."""
+        url = (url or "").strip().strip("'\"")
+        if not url:
+            return GuardDecision(False, "URL is required", "invalid")
+
+        # Auto-prefix http:// or https:// if protocol was omitted
+        if not (url.startswith("http://") or url.startswith("https://")):
+            if url.startswith(("localhost", "127.0.0.1", "0.0.0.0", "host.docker.internal")):
+                url = f"http://{url}"
+            else:
+                url = f"https://{url}"
+
         try:
             parsed = urlparse(url)
         except Exception:

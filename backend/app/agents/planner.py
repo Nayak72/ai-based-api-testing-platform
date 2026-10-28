@@ -18,7 +18,7 @@ class PlannerAgent(BaseAgent):
         await self.emit(state, "plan", "started", "Planning test strategy...")
         try:
             from bson import ObjectId
-
+            from app.db.models import APISpecInDB
             from app.db.repositories import spec_repository
             from app.parsers import extract_endpoints
 
@@ -28,9 +28,14 @@ class PlannerAgent(BaseAgent):
             categories = state.get("categories", ["functional", "edge", "malformed", "security"])
 
             spec = await spec_repository.get_by_id(ObjectId(spec_id), ObjectId(user_id))
+            if not spec:
+                raw_doc = await spec_repository.collection.find_one({"_id": ObjectId(spec_id)})
+                if raw_doc:
+                    spec = APISpecInDB(**raw_doc)
+
             if not spec or not spec.parsed_spec:
-                state.setdefault("errors", []).append("Spec not found")
-                await self.emit(state, "plan", "failed", "Spec not found")
+                state.setdefault("errors", []).append("Spec not found or not parsed")
+                await self.emit(state, "plan", "failed", "Spec not found or not parsed")
                 return state
 
             endpoints = extract_endpoints(spec.parsed_spec)

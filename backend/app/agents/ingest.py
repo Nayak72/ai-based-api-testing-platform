@@ -18,16 +18,63 @@ class IngestAgent(BaseAgent):
         await self.emit(state, "ingest", "started", "Parsing spec and building index...")
         try:
             from bson import ObjectId
-
+            from app.db.models import APISpecInDB
             from app.db.repositories import spec_repository
 
             spec_id = state.get("spec_id", "")
             user_id = state.get("user_id", "")
 
             spec = await spec_repository.get_by_id(ObjectId(spec_id), ObjectId(user_id))
+            if not spec:
+                raw_doc = await spec_repository.collection.find_one({"_id": ObjectId(spec_id)})
+                if raw_doc:
+                    spec = APISpecInDB(**raw_doc)
+
+            if not spec:
+                state.setdefault("errors", []).append("Spec not found")
+                await self.emit(state, "ingest", "failed", "Spec not found")
+                return state
+
+            # Self-healing: if raw_content is missing, check bundled specs by name
+            if not spec.raw_content:
+                from pathlib import Path
+                modes_dir = Path(__file__).parent.parent / "modes" / "specs"
+                spec_name_lower = spec.name.lower()
+                for candidate in modes_dir.glob("*.json"):
+                    if candidate.stem in spec_name_lower or ("vulnshop" in spec_name_lower and "vulnshop" in candidate.stem):
+                        spec.raw_content = candidate.read_text(encoding="utf-8")
+                        await spec_repository.collection.update_one(
+                            {"_id": ObjectId(spec_id)},
+                            {"$set": {"raw_content": spec.raw_content}},
+                        )
+                        break
+
+            # Auto-parse if spec has raw_content but wasn't parsed yet
+            if not spec.parsed_spec and spec.raw_content:
+                await self.emit(state, "ingest", "progress", "Spec not yet parsed — auto-parsing now...")
+                try:
+                    from app.parsers import parse_openapi_spec, parse_postman_collection
+
+                    await spec_repository.update_status(ObjectId(spec_id), "parsing")
+                    if spec.source_type == "openapi":
+                        parsed, eps, version, base_url = await parse_openapi_spec(spec.raw_content)
+                    else:
+                        parsed, eps, version, base_url = await parse_postman_collection(spec.raw_content)
+                    await spec_repository.update_parsed(ObjectId(spec_id), parsed, len(eps), version, base_url)
+                    # Reload spec
+                    spec = await spec_repository.get_by_id(ObjectId(spec_id), ObjectId(user_id))
+                    if not spec:
+                        raw_doc = await spec_repository.collection.find_one({"_id": ObjectId(spec_id)})
+                        if raw_doc:
+                            spec = APISpecInDB(**raw_doc)
+                except Exception as pe:
+                    state.setdefault("errors", []).append(f"Auto-parse failed: {pe}")
+                    await self.emit(state, "ingest", "failed", f"Spec auto-parse failed: {pe}")
+                    return state
+
             if not spec or not spec.parsed_spec:
-                state.setdefault("errors", []).append("Spec not found or not parsed")
-                await self.emit(state, "ingest", "failed", "Spec not found or not parsed")
+                state.setdefault("errors", []).append("Spec not parsed. Please upload raw content and re-parse.")
+                await self.emit(state, "ingest", "failed", "Spec not parsed. Please upload raw content and re-parse.")
                 return state
 
             # Extract endpoints

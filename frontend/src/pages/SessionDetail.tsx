@@ -182,6 +182,19 @@ export function SessionDetail() {
         </div>
       </Card>
 
+      {/* Session Failure Banner */}
+      {session?.status === 'failed' && (
+        <div className="p-4 rounded-16 bg-red-50 border-2 border-red-500 text-red-950 dark:bg-red-950/40 dark:text-red-200 flex items-start gap-3 animate-fade-in shadow-sm">
+          <XCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-sm font-bold">Session Execution Failed</p>
+            <p className="text-xs text-red-800 dark:text-red-300 font-mono">
+              {session.error || events.find((e) => e.status === 'failed')?.message || 'An unexpected error occurred during pipeline execution.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Human Approval Interrupt Banner */}
       {(session?.waiting_human || session?.status === 'waiting_approval') && (
         <div className="p-4 rounded-16 bg-brand-50 border-2 border-brand-500 text-brand-900 dark:bg-brand-950/40 dark:text-brand-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fade-in shadow-sm">
@@ -213,16 +226,22 @@ export function SessionDetail() {
 
           <div className="space-y-2">
             {AGENT_STEPS.map((s, idx) => {
-              const hasRun = events.some((e) => e.agent === s.id)
-              const isCurrent = currentAgent === s.id && !isCompleted
+              const agentEvents = events.filter((e) => e.agent === s.id)
+              const hasFailed = agentEvents.some((e) => e.status === 'failed')
+              const isCompleted = agentEvents.some((e) => e.status === 'completed')
+              const isWaiting = agentEvents.some((e) => e.status === 'waiting_human')
+              const isStarted = agentEvents.some((e) => e.status === 'started' || e.status === 'progress')
+              const isCurrent = currentAgent === s.id && session?.status === 'running'
 
               return (
                 <Card
                   key={s.id}
                   className={`p-3.5 transition-all ${
-                    isCurrent
+                    hasFailed
+                      ? 'border-red-300 bg-red-50/40 dark:bg-red-950/30 shadow-sm'
+                      : isCurrent
                       ? 'border-brand-600 bg-brand-50/40 dark:bg-brand-950/30 shadow-sm'
-                      : hasRun
+                      : isCompleted
                       ? 'border-zinc-200 dark:border-zinc-800'
                       : 'border-zinc-100 dark:border-zinc-800/50 opacity-60'
                   }`}
@@ -231,12 +250,22 @@ export function SessionDetail() {
                     <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
                       {idx + 1}. {s.name}
                     </span>
-                    {hasRun ? (
+                    {hasFailed ? (
+                      <span className="text-red-600 text-xs font-bold flex items-center gap-1">
+                        <XCircle className="w-3.5 h-3.5" />
+                        Failed
+                      </span>
+                    ) : isCompleted ? (
                       <span className="text-brand-600 text-xs font-bold flex items-center gap-1">
                         <CheckCircle className="w-3.5 h-3.5" />
                         Done
                       </span>
-                    ) : isCurrent ? (
+                    ) : isWaiting ? (
+                      <span className="text-amber-600 text-xs font-bold flex items-center gap-1">
+                        <WarningCircle className="w-3.5 h-3.5" />
+                        Awaiting Approval
+                      </span>
+                    ) : isCurrent || isStarted ? (
                       <span className="text-brand-600 text-xs font-bold flex items-center gap-1">
                         <Lightning className="w-3.5 h-3.5 animate-pulse" />
                         Active

@@ -97,16 +97,26 @@ class Settings(BaseSettings):
     local_llm_model: str = "llama3"
 
     # Target Safety
-    owned_host_allowlist: list[str] = []
+    owned_host_allowlist: str | list[str] = []
     online_max_rps: float = 2.0
     online_max_concurrency: int = 3
 
     @field_validator("owned_host_allowlist", mode="before")
     @classmethod
-    def parse_allowlist(cls, v: object) -> object:
+    def parse_allowlist(cls, v: object) -> list[str]:
+        if not v:
+            return []
         if isinstance(v, str):
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
             return [h.strip() for h in v.split(",") if h.strip()]
-        return v
+        if isinstance(v, list):
+            return [str(h) for h in v]
+        return []
 
 
 @lru_cache

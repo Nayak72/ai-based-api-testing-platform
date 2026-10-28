@@ -56,6 +56,25 @@ async def import_catalog_entry(catalog_id: str, user_id: CurrentUserId):
         raw_content=raw_content,
     )
     spec = await spec_repository.create(spec_create, user_id, spec_hash)
+
+    # Automatically parse the spec so it is immediately ready
+    try:
+        from app.parsers import parse_openapi_spec
+
+        parsed, endpoints, version, base_url = await parse_openapi_spec(raw_content)
+        await spec_repository.update_parsed(
+            spec.id,
+            parsed,
+            len(endpoints),
+            version,
+            base_url or entry.get("base_url"),
+        )
+        spec = await spec_repository.get_by_id(spec.id, user_id)
+        logger.info("Catalog spec parsed successfully", catalog_id=catalog_id, endpoints=len(endpoints))
+    except Exception as e:
+        logger.warning("Failed to auto-parse catalog spec", catalog_id=catalog_id, error=str(e))
+        await spec_repository.update_status(spec.id, "error", str(e))
+
     logger.info("Catalog entry imported", catalog_id=catalog_id, spec_id=str(spec.id))
 
     return {"spec_id": str(spec.id), "name": spec.name, "base_url": entry.get("base_url")}

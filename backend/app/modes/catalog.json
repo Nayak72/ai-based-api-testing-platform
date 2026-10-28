@@ -1,5 +1,15 @@
 [
   {
+    "id": "vulnshop",
+    "name": "VulnShop (Demo Target)",
+    "base_url": "http://localhost:8001",
+    "spec_path": "specs/vulnshop.json",
+    "auth": "bearer",
+    "notes": "Intentionally vulnerable local demo store for BOLA, BFLA, BOPLA, and security audits.",
+    "safe_methods_only": false,
+    "rate_limit_rps": 10
+  },
+  {
     "id": "jsonplaceholder",
     "name": "JSONPlaceholder",
     "base_url": "https://jsonplaceholder.typicode.com",

@@ -72,9 +72,12 @@ export function NewSession() {
 
     // Load providers
     providersApi.list().then((res) => {
-      setProviders(res.data || [])
-      if (res.data && res.data.length > 0) {
-        setSelectedProviderId(res.data[0].id)
+      const list: ProviderProfile[] = Array.isArray(res.data)
+        ? res.data
+        : (res.data as any)?.providers ?? []
+      setProviders(list)
+      if (list.length > 0) {
+        setSelectedProviderId(list[0].id)
       }
     }).catch(() => {})
   }, [])
@@ -129,12 +132,14 @@ export function NewSession() {
 
       // If VulnShop, find or import VulnShop bundled spec
       if (sourceType === 'vulnshop') {
-        const vsSpec = specs.find((s) => s.name.toLowerCase().includes('vulnshop'))
+        const vsSpec = specs.find(
+          (s) => s.name.toLowerCase().includes('vulnshop') && s.status === 'ready' && (s.endpoints_count || 0) > 0
+        )
         if (vsSpec) {
           finalSpecId = vsSpec.id
         } else {
-          // Import via catalog or create from bundled path
-          const res = await catalogApi.import('dummyjson', { mode: 'local', name: 'VulnShop Demo' })
+          // Import VulnShop bundled catalog entry
+          const res = await catalogApi.import('vulnshop', { mode: 'local', name: 'VulnShop (Demo Target)' })
           finalSpecId = res.data.spec_id
         }
       } else if (sourceType === 'catalog') {
@@ -515,7 +520,7 @@ export function NewSession() {
               <option value="">Default Cloud (OpenRouter / Claude 3.5 Sonnet)</option>
               {providers.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.provider_type} - {p.default_model})
+                  {p.name} ({p.preset ?? p.provider_type} — {p.model ?? p.default_model})
                 </option>
               ))}
             </select>

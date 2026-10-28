@@ -21,13 +21,33 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import uvicorn
+import bcrypt
 from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from passlib.context import CryptContext
 
-# ── In-memory data store ──────────────────────────────────────────────────────
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# ── Password helper (replaces legacy passlib with modern bcrypt) ───────────────
+
+class PasswordHelper:
+    """Drop-in password helper compatible with bcrypt >= 4.0 and Python 3.14."""
+
+    @staticmethod
+    def hash(password: str) -> str:
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+
+    @staticmethod
+    def verify(plain_password: str, hashed_password: str) -> bool:
+        try:
+            return bcrypt.checkpw(
+                plain_password.encode("utf-8"),
+                hashed_password.encode("utf-8"),
+            )
+        except Exception:
+            return False
+
+
+pwd_context = PasswordHelper()
 
 USERS: dict[int, dict] = {
     1: {
