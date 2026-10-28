@@ -13,6 +13,11 @@ export function useSSE(sessionId: string | null, options: UseSSEOptions = {}) {
   const [isCompleted, setIsCompleted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
+  const optionsRef = useRef(options)
+
+  useEffect(() => {
+    optionsRef.current = options
+  }, [options])
 
   const clearEvents = useCallback(() => {
     setEvents([])
@@ -21,14 +26,8 @@ export function useSSE(sessionId: string | null, options: UseSSEOptions = {}) {
   useEffect(() => {
     if (!sessionId) return
 
-    const token = localStorage.getItem('access_token')
-    if (!token) {
-      setError('Not authenticated')
-      return
-    }
-
-    const url = `/api/v1/sessions/${sessionId}/events?token=${encodeURIComponent(token)}`
-    const es = new EventSource(url)
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+    const es = new EventSource(`${apiBaseUrl}/sessions/${sessionId}/events`, { withCredentials: true })
     eventSourceRef.current = es
 
     setIsConnected(true)
@@ -44,11 +43,11 @@ export function useSSE(sessionId: string | null, options: UseSSEOptions = {}) {
           }
           return [...prev, parsed]
         })
-        options.onEvent?.(parsed)
+        optionsRef.current.onEvent?.(parsed)
 
         if (parsed.step === 'session_done' || parsed.step === 'session_error') {
           setIsCompleted(true)
-          options.onComplete?.()
+          optionsRef.current.onComplete?.()
           es.close()
         }
       } catch (err) {
@@ -59,7 +58,7 @@ export function useSSE(sessionId: string | null, options: UseSSEOptions = {}) {
     es.onerror = (err) => {
       console.warn('SSE connection error or closed', err)
       setIsConnected(false)
-      options.onError?.(err)
+      optionsRef.current.onError?.(err)
       es.close()
     }
 

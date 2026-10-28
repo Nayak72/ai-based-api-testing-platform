@@ -9,9 +9,19 @@ from fastapi import APIRouter, HTTPException, Query, status
 from app.api.deps import CurrentUserId
 from app.db.models import ProviderProfileCreate, ProviderProfileUpdate
 from app.db.repositories.providers import provider_repository
+from app.safety.target_guard import TargetPolicy, TargetGuard
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+_LOCAL_PROVIDER_PRESETS = {"ollama", "lmstudio", "llamacpp"}
+
+
+def _validate_provider_url(base_url: str, preset: str) -> None:
+    policy = TargetPolicy.LOCAL if preset in _LOCAL_PROVIDER_PRESETS else TargetPolicy.ONLINE
+    decision = TargetGuard(mode=policy).check(base_url, policy)
+    if not decision.allowed:
+        raise HTTPException(status_code=422, detail=f"Provider URL blocked: {decision.reason}")
 
 
 def _safe_profile(profile) -> dict:
@@ -36,6 +46,7 @@ async def list_ollama_models(base_url: str = Query("http://localhost:11434")):
     """List models installed in a local Ollama instance."""
     import httpx
 
+    _validate_provider_url(base_url, "ollama")
     tags_url = base_url.rstrip("/") + "/api/tags"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -44,8 +55,8 @@ async def list_ollama_models(base_url: str = Query("http://localhost:11434")):
             data = resp.json()
             models = [m["name"] for m in data.get("models", [])]
             return {"models": models}
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Cannot reach Ollama at {base_url}: {e}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Cannot reach the local Ollama service")
 
 
 @router.get("")
@@ -56,6 +67,7 @@ async def list_providers(user_id: CurrentUserId):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_provider(body: ProviderProfileCreate, user_id: CurrentUserId):
+    _validate_provider_url(body.base_url, body.preset.value)
     profile = await provider_repository.create(body, ObjectId(user_id))
     return _safe_profile(profile)
 
@@ -66,6 +78,11 @@ async def update_provider(profile_id: str, body: ProviderProfileUpdate, user_id:
         obj_id = ObjectId(profile_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid profile ID")
+    existing = await provider_repository.get_by_id(obj_id, ObjectId(user_id))
+    if not existing:
+        raise HTTPException(status_code=404, detail="Provider profile not found")
+    if body.base_url:
+        _validate_provider_url(body.base_url, existing.preset.value)
     profile = await provider_repository.update(obj_id, ObjectId(user_id), body)
     if not profile:
         raise HTTPException(status_code=404, detail="Provider profile not found")

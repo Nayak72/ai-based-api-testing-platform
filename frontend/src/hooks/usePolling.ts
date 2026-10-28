@@ -37,7 +37,7 @@ export function usePolling(runId: string | null, options: UsePollingOptions = {}
         }
       })
 
-      if (['completed', 'failed', 'cancelled', 'cancelling'].includes(run.status)) {
+      if (['completed', 'completed_with_errors', 'failed', 'cancelled', 'cancelling'].includes(run.status)) {
         setIsPolling(false)
         if (intervalRef.current) {
           clearInterval(intervalRef.current)

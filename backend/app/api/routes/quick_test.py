@@ -8,9 +8,10 @@ from typing import Any
 import httpx
 import structlog
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import CurrentUserId
+from app.executor.engine import redact_headers
 from app.safety.target_guard import RunMode, TargetGuard
 
 logger = structlog.get_logger()
@@ -18,14 +19,16 @@ router = APIRouter()
 
 
 class QuickTestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     url: str
     method: str = "GET"
-    headers: dict[str, str] = {}
-    query_params: dict[str, str] = {}
+    headers: dict[str, str] = Field(default_factory=dict)
+    query_params: dict[str, str] = Field(default_factory=dict)
     body: Any = None
     auth_type: str | None = None
     auth_token: str | None = None
-    mode: str = "local"
+    mode: RunMode = RunMode.LOCAL
     timeout_seconds: float = 15.0
 
 
@@ -59,13 +62,7 @@ async def quick_test(body: QuickTestRequest, _user_id: CurrentUserId):
         else:
             target_url = f"https://{target_url}"
 
-    mode_str = body.mode.upper()
-    try:
-        mode = RunMode[mode_str]
-    except KeyError:
-        mode = RunMode.LOCAL
-
-    guard = TargetGuard(mode=mode, owned_allowlist=[])
+    guard = TargetGuard(mode=body.mode, owned_allowlist=[])
     allowed, reason = guard.check_url(target_url)
     if not allowed:
         raise HTTPException(status_code=403, detail=f"Target blocked: {reason}")
@@ -77,31 +74,50 @@ async def quick_test(body: QuickTestRequest, _user_id: CurrentUserId):
     elif body.auth_type == "api_key" and body.auth_token:
         req_headers["X-API-Key"] = body.auth_token.strip()
 
-    MAX_BODY = 51200
+    from app.config import get_settings
+
+    max_body = get_settings().max_response_body_bytes
     start = time.monotonic()
     try:
         method = body.method.upper()
         send_json = body.body if (body.body is not None and method in ("POST", "PUT", "PATCH", "DELETE")) else None
-        async with httpx.AsyncClient(timeout=body.timeout_seconds, follow_redirects=True) as client:
-            resp = await client.request(
+        async with httpx.AsyncClient(timeout=body.timeout_seconds, follow_redirects=False) as client:
+            async with client.stream(
                 method=method,
                 url=target_url,
                 headers=req_headers,
                 params=body.query_params or None,
                 json=send_json,
-            )
+            ) as resp:
+                chunks: list[bytes] = []
+                size = 0
+                truncated = False
+                async for chunk in resp.aiter_bytes():
+                    remaining = max_body - size
+                    if remaining <= 0:
+                        truncated = True
+                        break
+                    chunks.append(chunk[:remaining])
+                    size += len(chunks[-1])
+                    if len(chunk) > remaining:
+                        truncated = True
+                        break
+                raw = b"".join(chunks)
+                response_headers = redact_headers(dict(resp.headers))
+                response_status = resp.status_code
         duration_ms = (time.monotonic() - start) * 1000
-        raw = resp.content
-        truncated = len(raw) > MAX_BODY
-        raw = raw[:MAX_BODY]
+        content_length = response_headers.get("content-length", "0")
+        truncated = truncated or (content_length.isdigit() and int(content_length) > len(raw))
         try:
-            parsed_body = resp.json() if not truncated else raw.decode(errors="replace")
+            import json
+
+            parsed_body = json.loads(raw) if not truncated else raw.decode(errors="replace")
         except Exception:
             parsed_body = raw.decode(errors="replace")
 
         return QuickTestResponse(
-            status_code=resp.status_code,
-            headers=dict(resp.headers),
+            status_code=response_status,
+            headers=response_headers,
             body=parsed_body,
             body_truncated=truncated,
             duration_ms=round(duration_ms, 2),
@@ -115,12 +131,12 @@ async def quick_test(body: QuickTestRequest, _user_id: CurrentUserId):
             duration_ms=round((time.monotonic() - start) * 1000, 2),
             error="Request timed out",
         )
-    except Exception as e:
+    except Exception:
         return QuickTestResponse(
             status_code=0,
             headers={},
             body=None,
             body_truncated=False,
             duration_ms=round((time.monotonic() - start) * 1000, 2),
-            error=str(e),
+            error="Request could not be completed",
         )

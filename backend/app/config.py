@@ -1,15 +1,16 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from cryptography.fernet import Fernet
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_env_file = Path(__file__).resolve().parent.parent / ".env"
+_env_file = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(_env_file, ".env"),
+        env_file=_env_file,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -120,6 +121,30 @@ class Settings(BaseSettings):
         if isinstance(v, list):
             return [str(h) for h in v]
         return []
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        """Production must never start with sample signing/encryption material."""
+        if self.environment.casefold() != "production":
+            return self
+
+        placeholder_keys = {
+            "your-super-secret-key-at-least-32-characters-long",
+            "change-me",
+            "secret",
+            "example",
+        }
+        if self.debug or self.secret_key.casefold() in placeholder_keys or len(self.secret_key) < 32:
+            raise ValueError("Production requires a non-placeholder SECRET_KEY of at least 32 characters")
+        if not self.secrets_encryption_key:
+            raise ValueError("Production requires SECRETS_ENCRYPTION_KEY")
+        try:
+            Fernet(self.secrets_encryption_key.encode())
+        except Exception as exc:
+            raise ValueError("SECRETS_ENCRYPTION_KEY must be a valid Fernet key") from exc
+        if self.algorithm != "HS256":
+            raise ValueError("Only JWT_ALGORITHM=HS256 is supported")
+        return self
 
 
 @lru_cache

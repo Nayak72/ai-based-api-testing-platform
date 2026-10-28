@@ -64,7 +64,7 @@ class RunRepository:
         update = {"status": status, "updated_at": datetime.now()}
         if status == "running":
             update["started_at"] = datetime.now()
-        elif status in ("completed", "failed", "cancelled"):
+        elif status in ("completed", "completed_with_errors", "failed", "cancelled"):
             update["completed_at"] = datetime.now()
         result = await self.collection.find_one_and_update({"_id": run_id}, {"$set": update}, return_document=True)
         return TestRunInDB(**result) if result else None

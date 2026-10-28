@@ -49,37 +49,37 @@ export function NewSession() {
   // Step 4: AI & Routing
   const [providers, setProviders] = useState<ProviderProfile[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState<string>('')
-  const [agentic, setAgentic] = useState(true)
+  const agentic = true
 
   // Step 5: Scope & Intensity
   const [categories, setCategories] = useState<string[]>(['functional', 'edge', 'malformed', 'security'])
-  const [intensity, setIntensity] = useState<'quick' | 'normal' | 'deep'>('normal')
+  const [intensity, setIntensity] = useState<'safe' | 'standard' | 'aggressive'>('standard')
 
   // Launch state
   const [launching, setLaunching] = useState(false)
   const [sessionName, setSessionName] = useState('Security & Functional Audit')
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     // Load existing specs
-    specsApi.list({ page_size: 100 }).then((res) => {
-      setSpecs(res.data.specs || [])
-    }).catch(() => {})
-
-    // Load catalog
-    catalogApi.list().then((res) => {
-      setCatalogItems(res.data.catalog || [])
-    }).catch(() => {})
-
-    // Load providers
-    providersApi.list().then((res) => {
-      const list: ProviderProfile[] = Array.isArray(res.data)
-        ? res.data
-        : (res.data as any)?.providers ?? []
-      setProviders(list)
-      if (list.length > 0) {
-        setSelectedProviderId(list[0].id)
+    let active = true
+    const load = async () => {
+      try {
+        const [specRes, catalogRes, providerRes] = await Promise.all([
+          specsApi.list({ page_size: 100 }), catalogApi.list(), providersApi.list(),
+        ])
+        if (!active) return
+        setSpecs(specRes.data.specs || [])
+        setCatalogItems(catalogRes.data.entries || [])
+        const list = providerRes.data.providers || []
+        setProviders(list)
+        setSelectedProviderId(list.find((provider) => provider.is_default)?.id || '')
+      } catch (err: any) {
+        if (active) setLoadError(err.response?.data?.detail || 'Unable to load session options. Please retry.')
       }
-    }).catch(() => {})
+    }
+    void load()
+    return () => { active = false }
   }, [])
 
   const handleSourceChange = (type: 'catalog' | 'vulnshop' | 'existing' | 'url') => {
@@ -139,36 +139,46 @@ export function NewSession() {
           finalSpecId = vsSpec.id
         } else {
           // Import VulnShop bundled catalog entry
-          const res = await catalogApi.import('vulnshop', { mode: 'local', name: 'VulnShop (Demo Target)' })
+          const res = await catalogApi.import('vulnshop')
           finalSpecId = res.data.spec_id
         }
       } else if (sourceType === 'catalog') {
         // Import catalog spec
-        const res = await catalogApi.import(selectedCatalogId, { mode })
+        if (!selectedCatalogId) {
+          toast.error('Select a catalog entry first')
+          return
+        }
+        const res = await catalogApi.import(selectedCatalogId)
         finalSpecId = res.data.spec_id
       }
 
       if (!finalSpecId) {
-        // Fallback to first available spec
-        if (specs.length > 0) {
-          finalSpecId = specs[0].id
-        } else {
-          toast.error('Please select or import a specification first')
-          setLaunching(false)
-          return
-        }
+        toast.error('Please select or import a specification first')
+        return
+      }
+
+      if (!sessionName.trim() || categories.length === 0) {
+        toast.error('Provide a session name and select at least one category')
+        return
+      }
+      if (mode === 'online' && categories.includes('security') && !ownedAttestation) {
+        toast.error('Online security testing requires ownership attestation')
+        return
       }
 
       const res = await sessionsApi.create({
         spec_id: finalSpecId,
-        name: sessionName || 'Test Session',
+        name: sessionName.trim(),
         mode,
         base_url: baseUrl || undefined,
         auth_type: authType === 'none' ? undefined : authType,
         auth_token: authToken || undefined,
+        secondary_auth_type: secondaryAuthType === 'none' ? undefined : secondaryAuthType,
+        secondary_auth_token: secondaryAuthToken || undefined,
         provider_profile_id: selectedProviderId || undefined,
         categories,
         intensity,
+        owned_host_attestation: ownedAttestation,
         agentic,
       })
 
@@ -176,6 +186,7 @@ export function NewSession() {
       navigate(`/sessions/${res.data.session_id || res.data.id}`)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || err.message || 'Failed to start session')
+    } finally {
       setLaunching(false)
     }
   }
@@ -192,6 +203,12 @@ export function NewSession() {
           Configure an AI-powered security and functional audit session.
         </p>
       </div>
+
+      {loadError && (
+        <div role="alert" className="rounded-12 border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          {loadError}
+        </div>
+      )}
 
       {/* Stepper Progress */}
       <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
@@ -537,12 +554,7 @@ export function NewSession() {
                 Generates a test strategy plan, interrupts for human approval, triages bug findings, and streams live agent events via SSE.
               </p>
             </div>
-            <input
-              type="checkbox"
-              checked={agentic}
-              onChange={(e) => setAgentic(e.target.checked)}
-              className="mt-1 rounded text-brand-600 focus:ring-brand-500 w-4 h-4"
-            />
+            <span className="mt-1 text-xs font-semibold text-brand-700">Required</span>
           </div>
 
           {/* Test Categories */}
@@ -580,7 +592,7 @@ export function NewSession() {
               Test Intensity
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {(['quick', 'normal', 'deep'] as const).map((lvl) => (
+              {(['safe', 'standard', 'aggressive'] as const).map((lvl) => (
                 <button
                   key={lvl}
                   type="button"
@@ -591,7 +603,7 @@ export function NewSession() {
                       : 'border-zinc-200 dark:border-zinc-700 text-zinc-600'
                   }`}
                 >
-                  {lvl} ({lvl === 'quick' ? 'Smoke' : lvl === 'normal' ? 'Standard' : 'Thorough'})
+                  {lvl} ({lvl === 'safe' ? 'Smoke' : lvl === 'standard' ? 'Standard' : 'Thorough'})
                 </button>
               ))}
             </div>

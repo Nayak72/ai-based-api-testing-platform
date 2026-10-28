@@ -4,6 +4,7 @@ import httpx
 import structlog
 from bson import ObjectId
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import CurrentUserId
 from app.api.schemas.specs import (
@@ -22,6 +23,14 @@ from app.safety.target_guard import RunMode, TargetGuard
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+class SpecUrlImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(min_length=1, max_length=2048)
+    name: str | None = Field(default=None, max_length=200)
+    mode: RunMode = RunMode.LOCAL
 
 
 def compute_spec_hash(content: str) -> str:
@@ -265,33 +274,27 @@ async def delete_spec(spec_id: str, user_id: CurrentUserId):
 
 @router.post("/from-url", response_model=SpecResponse, status_code=status.HTTP_201_CREATED)
 async def import_spec_from_url(
-    body: dict,
+    body: SpecUrlImportRequest,
     user_id: CurrentUserId,
 ):
     """Fetch an OpenAPI spec from a URL and import it."""
-    url: str = body.get("url", "").strip()
+    url = body.url.strip()
     if not url:
         raise HTTPException(status_code=422, detail="url is required")
 
-    mode_str = body.get("mode", "local").upper()
-    try:
-        mode = RunMode[mode_str]
-    except KeyError:
-        mode = RunMode.LOCAL
-
-    guard = TargetGuard(mode=mode, owned_allowlist=[])
+    guard = TargetGuard(mode=body.mode, owned_allowlist=[])
     allowed, reason = guard.check_url(url)
     if not allowed:
         raise HTTPException(status_code=403, detail=f"Target blocked: {reason}")
 
     try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
             resp = await client.get(url, headers={"Accept": "application/json, application/yaml, text/plain"})
             resp.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {e}")
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=400, detail=f"Request error: {e}")
+    except httpx.HTTPStatusError:
+        raise HTTPException(status_code=400, detail="The specification URL returned an error")
+    except httpx.RequestError:
+        raise HTTPException(status_code=400, detail="The specification URL could not be fetched")
 
     content = resp.text
     if len(content.encode("utf-8")) > 5 * 1024 * 1024:
@@ -303,7 +306,7 @@ async def import_spec_from_url(
     else:
         source_format = "json"
 
-    name = body.get("name") or url.split("/")[-1] or "imported-spec"
+    name = body.name or url.split("/")[-1] or "imported-spec"
     spec_hash = compute_spec_hash(content)
 
     spec_create = SpecUploadRequest(

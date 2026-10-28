@@ -55,7 +55,12 @@ class ReportGenerator:
             file_size += Path(pdf_path).stat().st_size
 
         report_base = ReportBase(run_id=run_id, user_id=user_id, format=format)
-        await report_repository.create(report_base, html_path=html_path, pdf_path=pdf_path)
+        await report_repository.create(
+            report_base,
+            html_path=html_path,
+            pdf_path=pdf_path,
+            file_size_bytes=file_size,
+        )
 
         logger.info("Report generated", run_id=str(run_id), html=html_path, pdf=pdf_path)
 

@@ -44,10 +44,7 @@ class TargetGuard:
         owned_allowlist: list[str] | set[str] | None = None,
     ) -> None:
         if isinstance(mode, str):
-            try:
-                self.mode = TargetPolicy(mode.lower())
-            except ValueError:
-                self.mode = TargetPolicy.LOCAL
+            self.mode = TargetPolicy(mode.lower())
         else:
             self.mode = mode
         self.owned_allowlist = set(owned_allowlist or [])
@@ -96,11 +93,11 @@ class TargetGuard:
         if not host:
             return GuardDecision(False, "No host in URL", "invalid")
 
-        # Allowlist bypass
-        if host in allowlist:
-            return GuardDecision(True, f"Host '{host}' is in the allowlist", "allowed")
-
         classification = self._classify_host(host)
+
+        # An allowlist can narrow which targets a deployment permits, but it
+        # must never bypass IP-class safety checks.
+        allowlisted = host.casefold() in {entry.casefold() for entry in allowlist}
 
         if policy == TargetPolicy.LOCAL:
             allowed = classification in ("loopback", "private", "local_special")
@@ -113,7 +110,7 @@ class TargetGuard:
             return GuardDecision(True, f"LOCAL mode: {classification} host allowed", classification)
 
         elif policy == TargetPolicy.ONLINE:
-            if classification in ("loopback", "private", "link_local", "metadata", "local_special"):
+            if classification in ("loopback", "private", "link_local", "metadata", "local_special", "mixed"):
                 return GuardDecision(
                     False,
                     f"ONLINE mode: {classification} host '{host}' blocked for safety",
@@ -121,7 +118,8 @@ class TargetGuard:
                 )
             if classification == "invalid":
                 return GuardDecision(False, f"Cannot resolve host '{host}'", classification)
-            return GuardDecision(True, "ONLINE mode: public host allowed", classification)
+            suffix = " (allowlisted)" if allowlisted else ""
+            return GuardDecision(True, f"ONLINE mode: public host allowed{suffix}", classification)
 
         return GuardDecision(False, "Unknown policy", "invalid")
 
@@ -143,6 +141,12 @@ class TargetGuard:
 
         classifications = {self._classify_ip(ip) for ip in ips}
 
+        # Do not allow a hostname that resolves to both a safe and unsafe
+        # network. Selecting a different A/AAAA record later would bypass the
+        # original check.
+        if len(classifications) > 1:
+            return "mixed"
+
         # Priority: most dangerous first
         for cls in ("metadata", "link_local", "loopback", "private", "public"):
             if cls in classifications:
@@ -155,6 +159,10 @@ class TargetGuard:
         except ValueError:
             return "invalid"
 
+        # Normalise IPv4-mapped IPv6 before applying address-class policy.
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            return self._classify_ip(str(ip.ipv4_mapped))
+
         # Link-local and metadata check first (169.254.x.x)
         if ip.is_link_local:
             return "metadata" if str(ip).startswith("169.254.") else "link_local"
@@ -162,7 +170,7 @@ class TargetGuard:
             return "loopback"
         if ip.is_private:
             return "private"
-        if ip.is_multicast or ip.is_unspecified or ip.is_reserved:
+        if ip.is_multicast or ip.is_unspecified or ip.is_reserved or not ip.is_global:
             return "invalid"
         return "public"
 

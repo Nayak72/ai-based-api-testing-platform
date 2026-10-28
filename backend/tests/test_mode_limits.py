@@ -46,3 +46,16 @@ def test_online_mode_with_attestation():
     assert config.concurrency == 3
     assert config.rate_limit_rps == 1.0
     assert "security" in config.categories
+
+
+def test_run_config_round_trip_preserves_safety_fields():
+    config = RunConfig(
+        mode="online",
+        intensity="aggressive",
+        categories=["functional", "security"],
+        owned_host_attestation=True,
+        max_total_requests=42,
+        routing={"provider_profile_id": "profile"},
+        auth_secret_ref="session",
+    )
+    assert RunConfig(**config.model_dump()) == config

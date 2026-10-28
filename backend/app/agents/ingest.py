@@ -18,17 +18,12 @@ class IngestAgent(BaseAgent):
         await self.emit(state, "ingest", "started", "Parsing spec and building index...")
         try:
             from bson import ObjectId
-            from app.db.models import APISpecInDB
             from app.db.repositories import spec_repository
 
             spec_id = state.get("spec_id", "")
             user_id = state.get("user_id", "")
 
             spec = await spec_repository.get_by_id(ObjectId(spec_id), ObjectId(user_id))
-            if not spec:
-                raw_doc = await spec_repository.collection.find_one({"_id": ObjectId(spec_id)})
-                if raw_doc:
-                    spec = APISpecInDB(**raw_doc)
 
             if not spec:
                 state.setdefault("errors", []).append("Spec not found")
@@ -63,10 +58,6 @@ class IngestAgent(BaseAgent):
                     await spec_repository.update_parsed(ObjectId(spec_id), parsed, len(eps), version, base_url)
                     # Reload spec
                     spec = await spec_repository.get_by_id(ObjectId(spec_id), ObjectId(user_id))
-                    if not spec:
-                        raw_doc = await spec_repository.collection.find_one({"_id": ObjectId(spec_id)})
-                        if raw_doc:
-                            spec = APISpecInDB(**raw_doc)
                 except Exception as pe:
                     state.setdefault("errors", []).append(f"Auto-parse failed: {pe}")
                     await self.emit(state, "ingest", "failed", f"Spec auto-parse failed: {pe}")

@@ -265,9 +265,9 @@ export interface CatalogItem {
 }
 
 export const catalogApi = {
-  list: () => api.get<{ catalog: CatalogItem[] }>('/catalog'),
-  import: (catalogId: string, options?: { mode?: string; name?: string }) =>
-    api.post<{ spec_id: string; status: string; message: string }>(`/catalog/${catalogId}/import`, options || {}),
+  list: () => api.get<{ entries: CatalogItem[] }>('/catalog'),
+  import: (catalogId: string) =>
+    api.post<{ spec_id: string; name: string; base_url: string }>(`/catalog/${catalogId}/import`),
 }
 
 // Sessions & Agent Events
@@ -276,7 +276,7 @@ export interface Session {
   spec_id: string
   user_id: string
   name: string
-  status: 'pending' | 'waiting_approval' | 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'pending' | 'waiting_approval' | 'running' | 'completed' | 'completed_with_errors' | 'failed' | 'cancelled'
   mode: 'local' | 'online'
   base_url?: string
   auth_type?: string
@@ -305,7 +305,7 @@ export interface AgentEvent {
   session_id: string
   agent: string
   step: string
-  status: 'started' | 'progress' | 'completed' | 'failed' | 'waiting_human'
+  status: 'started' | 'progress' | 'completed' | 'completed_with_errors' | 'failed' | 'waiting_human'
   message: string
   ts: string
   data?: any
@@ -326,10 +326,13 @@ export const sessionsApi = {
     base_url?: string
     auth_type?: string
     auth_token?: string
+    secondary_auth_type?: string
+    secondary_auth_token?: string
     provider_profile_id?: string
     categories?: string[]
-    intensity?: string
-    agentic?: boolean
+    intensity?: 'safe' | 'standard' | 'aggressive'
+    owned_host_attestation?: boolean
+    agentic?: true
   }) => api.post<{ session_id: string; id: string; status: string }>('/sessions', data),
   list: (params?: { page?: number; page_size?: number }) =>
     api.get<{ sessions: Session[]; total: number; page: number; page_size: number }>('/sessions', { params }),

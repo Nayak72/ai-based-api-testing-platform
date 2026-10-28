@@ -3,7 +3,8 @@ import asyncio
 import structlog
 from bson import ObjectId
 
-from app.db.models import RunConfig, TestCaseInDB
+from app.config import get_settings
+from app.db.models import AuthConfig, RunConfig, TestCaseInDB
 from app.db.repositories import result_repository, run_repository, test_case_repository
 from app.executor.engine import TestExecutor
 
@@ -69,6 +70,30 @@ class RunOrchestrator:
             # Persist updated config
             await run_repository.update_config(run_obj_id, run.config)
 
+        # Session credentials are encrypted at rest and never placed in the
+        # public run document. Resolve them only in this worker immediately
+        # before execution.
+        if run.config.auth_secret_ref:
+            from app.core.security import decrypt_value
+            from app.db.mongo import get_collection
+
+            try:
+                session = await get_collection("sessions").find_one(
+                    {"_id": ObjectId(run.config.auth_secret_ref), "user_id": user_obj_id}
+                )
+                if session and session.get("auth_token_encrypted") and session.get("auth_type"):
+                    run.config.auth_override = AuthConfig(
+                        type=session["auth_type"], token=decrypt_value(session["auth_token_encrypted"])
+                    )
+                if session and session.get("secondary_auth_token_encrypted") and session.get("secondary_auth_type"):
+                    run.config.auth_secondary = AuthConfig(
+                        type=session["secondary_auth_type"], token=decrypt_value(session["secondary_auth_token_encrypted"])
+                    )
+            except Exception as exc:
+                logger.error("Unable to resolve encrypted session credentials", error=type(exc).__name__)
+                await run_repository.update_status(run_obj_id, "failed")
+                return
+
         await run_repository.update_status(run_obj_id, "running")
         await run_repository.update_started_at(run_obj_id)
         run = await run_repository.get_by_id(run_obj_id, user_obj_id)
@@ -91,6 +116,7 @@ class RunOrchestrator:
             request_timeout=run.config.timeout_seconds,
             max_retries=run.config.retry_failed,
             rate_limit_rps=run.config.rate_limit_rps,
+            max_response_body_bytes=get_settings().max_response_body_bytes,
         )
 
         try:
@@ -101,6 +127,13 @@ class RunOrchestrator:
             )
 
             filtered_cases = [tc for tc in test_cases if tc.category in run.config.categories]
+            if len(filtered_cases) > run.config.max_total_requests:
+                filtered_cases = filtered_cases[: run.config.max_total_requests]
+                logger.warning(
+                    "Run request budget enforced",
+                    run_id=run_id,
+                    max_total_requests=run.config.max_total_requests,
+                )
             logger.info("Starting test execution", run_id=run_id, total_cases=len(filtered_cases))
 
             tasks = []

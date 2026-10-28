@@ -1,22 +1,36 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AuthConfigSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: str = "bearer"
     token_env_var: str | None = None
 
 
 class RunConfigSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     concurrency: int = Field(10, ge=1, le=100)
     timeout_seconds: float = Field(30.0, ge=1.0, le=300.0)
     retry_failed: int = Field(1, ge=0, le=5)
-    categories: list[str] = ["functional", "edge", "malformed", "security"]
+    categories: list[str] = Field(default_factory=lambda: ["functional", "edge", "malformed", "security"])
     base_url_override: str | None = None
     auth_override: AuthConfigSchema | None = None
     spec_base_url: str | None = None
     spec_auth_config: AuthConfigSchema | None = None
+    auth_secondary: AuthConfigSchema | None = None
+    rate_limit_rps: float | None = Field(default=None, gt=0)
+    mode: Literal["local", "online"] = "local"
+    intensity: Literal["safe", "standard", "aggressive"] = "standard"
+    max_total_requests: int = Field(500, ge=1, le=10_000)
+    owned_host_attestation: bool = False
+    routing: dict | None = None
+    auth_secret_ref: str | None = None
 
 
 class RunSummarySchema(BaseModel):
@@ -29,6 +43,7 @@ class RunSummarySchema(BaseModel):
 
 
 class RunCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     spec_id: str
     name: str = Field(min_length=1, max_length=200)
     config: RunConfigSchema | None = None

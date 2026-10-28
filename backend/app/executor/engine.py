@@ -18,6 +18,17 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
+_SENSITIVE_HEADERS = {"authorization", "proxy-authorization", "x-api-key", "cookie", "set-cookie"}
+_IDEMPOTENT_METHODS = {"GET", "HEAD", "OPTIONS", "PUT", "DELETE"}
+
+
+def redact_headers(headers: dict[str, str]) -> dict[str, str]:
+    """Return headers safe to persist in a result or log."""
+    return {
+        key: ("***" if key.casefold() in _SENSITIVE_HEADERS else value)
+        for key, value in headers.items()
+    }
+
 
 class TokenBucket:
     def __init__(self, rate: float):
@@ -60,7 +71,9 @@ class TestExecutor:
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(request_timeout),
             limits=httpx.Limits(max_connections=max_concurrent_requests, max_keepalive_connections=5),
-            follow_redirects=True,
+            # Redirects are an SSRF boundary. They are blocked unless each hop
+            # is explicitly revalidated by a future redirect-aware transport.
+            follow_redirects=False,
         )
 
     async def execute_test_case(self, test_case: TestCaseInDB, run_context: "RunContext") -> TestResultBase:
@@ -96,11 +109,11 @@ class TestExecutor:
         # TargetGuard check before sending any request
         try:
             from app.safety.target_guard import TargetGuard, TargetPolicy
+            from app.config import get_settings
 
-            mode = getattr(run_context.config, "mode", "local")
-            policy = TargetPolicy.ONLINE if mode == "online" else TargetPolicy.LOCAL
-            guard = TargetGuard()
-            decision = guard.check(url, policy)
+            policy = TargetPolicy(getattr(run_context.config, "mode", ""))
+            guard = TargetGuard(mode=policy, owned_allowlist=get_settings().owned_host_allowlist)
+            decision = guard.check(url, policy, guard.owned_allowlist)
             if not decision.allowed:
                 return TestResultBase(
                     run_id=run_context.run_id,
@@ -113,27 +126,39 @@ class TestExecutor:
                     error=f"Blocked by TargetGuard: {decision.reason}",
                 )
         except Exception as guard_err:
-            logger.warning("TargetGuard check failed (allowing)", url=url, error=str(guard_err))
+            logger.warning("TargetGuard check failed", error=type(guard_err).__name__)
+            return TestResultBase(
+                run_id=run_context.run_id,
+                test_case_id=test_case.id,
+                endpoint_id=test_case.endpoint_id,
+                category=test_case.category,
+                status="blocked",
+                request_sent=RequestSent(method=test_case.request.method, url=url, headers={}),
+                response=ResponseReceived(status_code=0, duration_ms=0),
+                error="Target validation could not be completed",
+            )
         headers = dict(test_case.request.headers)
         query_params = dict(test_case.request.query_params)
 
         auth_config = run_context.config.auth_override or run_context.config.spec_auth_config
-        if auth_config and auth_config.token_env_var:
-            import os
+        if auth_config:
+            token = auth_config.token
+            if not token and auth_config.token_env_var:
+                import os
 
-            token = os.environ.get(auth_config.token_env_var)
+                token = os.environ.get(auth_config.token_env_var)
             if token:
                 if auth_config.type == "bearer":
                     headers["Authorization"] = f"Bearer {token}"
+                elif auth_config.type == "api_key":
+                    headers["X-API-Key"] = token
 
-        masked_headers = dict(headers)
-        if "Authorization" in masked_headers:
-            auth_val = masked_headers["Authorization"]
-            if auth_val.startswith("Bearer "):
-                masked_headers["Authorization"] = f"Bearer {auth_val[7:10]}***"
+        masked_headers = redact_headers(headers)
 
         last_error = None
-        for attempt in range(self.max_retries + 1):
+        retryable = test_case.request.method.upper() in _IDEMPOTENT_METHODS
+        attempts = self.max_retries + 1 if retryable else 1
+        for attempt in range(attempts):
             try:
                 start = time.perf_counter()
 
@@ -142,40 +167,45 @@ class TestExecutor:
                     content = test_case.request.raw_body
                     if test_case.request.content_type:
                         headers["Content-Type"] = test_case.request.content_type
-                    response = await self.client.request(
-                        method=test_case.request.method,
-                        url=url,
-                        headers=headers,
-                        params=query_params,
-                        content=content,
-                    )
+                    request_kwargs = {"content": content}
                 else:
-                    response = await self.client.request(
-                        method=test_case.request.method,
-                        url=url,
-                        headers=headers,
-                        params=query_params,
-                        json=test_case.request.body if test_case.request.body is not None else None,
-                    )
+                    request_kwargs = {"json": test_case.request.body if test_case.request.body is not None else None}
+
+                async with self.client.stream(
+                    method=test_case.request.method,
+                    url=url,
+                    headers=headers,
+                    params=query_params,
+                    **request_kwargs,
+                ) as response:
+                    chunks: list[bytes] = []
+                    received = 0
+                    async for chunk in response.aiter_bytes():
+                        remaining = self.max_response_body_bytes - received
+                        if remaining <= 0:
+                            break
+                        chunks.append(chunk[:remaining])
+                        received += len(chunks[-1])
+                        if len(chunk) > remaining:
+                            break
+                    body_truncated = response.headers.get("content-length", "0").isdigit() and int(response.headers.get("content-length", "0")) > received
+                    response_body = b"".join(chunks)
+                    response_headers = redact_headers(dict(response.headers))
+                    response_status = response.status_code
+                    response_url = str(response.url)
                 duration_ms = int((time.perf_counter() - start) * 1000)
 
-                response_body = response.read()
-                body_truncated = False
                 body_hash = None
                 response_data = None
 
                 if response_body:
                     body_hash = f"sha256:{hashlib.sha256(response_body).hexdigest()}"
-                    if len(response_body) > self.max_response_body_bytes:
-                        body_truncated = True
-                        response_data = response_body[: self.max_response_body_bytes].decode("utf-8", errors="replace")
-                    else:
-                        response_data = response_body.decode("utf-8", errors="replace")
+                    response_data = response_body.decode("utf-8", errors="replace")
 
                 assertions = evaluate_assertions(
                     test_case.expected.assertions,
-                    response.status_code,
-                    response.headers,
+                    response_status,
+                    response_headers,
                     response_data,
                     test_case.expected.response_schema,
                     test_case.expected.status_code,
@@ -192,15 +222,15 @@ class TestExecutor:
                     status=status,
                     request_sent=RequestSent(
                         method=test_case.request.method,
-                        url=str(response.url),
+                        url=response_url,
                         headers=masked_headers,
                         body=test_case.request.raw_body
                         if test_case.request.raw_body is not None
                         else test_case.request.body,
                     ),
                     response=ResponseReceived(
-                        status_code=response.status_code,
-                        headers=dict(response.headers),
+                        status_code=response_status,
+                        headers=response_headers,
                         body=response_data,
                         body_truncated=body_truncated,
                         body_hash=body_hash,
@@ -212,12 +242,12 @@ class TestExecutor:
 
             except httpx.TimeoutException as e:
                 last_error = e
-                if attempt < self.max_retries:
+                if attempt + 1 < attempts:
                     await asyncio.sleep(2**attempt)
                     continue
             except httpx.NetworkError as e:
                 last_error = e
-                if attempt < self.max_retries:
+                if attempt + 1 < attempts:
                     await asyncio.sleep(2**attempt)
                     continue
             except Exception as e:

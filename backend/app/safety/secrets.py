@@ -2,11 +2,8 @@ from cryptography.fernet import Fernet
 
 from app.config import get_settings
 
-_settings = get_settings()
-
-
 def _get_fernet() -> Fernet:
-    key = _settings.secrets_encryption_key
+    key = get_settings().secrets_encryption_key
     if not key:
         raise RuntimeError("SECRETS_ENCRYPTION_KEY not set in environment")
     return Fernet(key.encode() if isinstance(key, str) else key)

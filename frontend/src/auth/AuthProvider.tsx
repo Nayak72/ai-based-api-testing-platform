@@ -29,18 +29,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const login = async (email: string, password: string) => {
-    const response = await api.post('/auth/login', { email, password })
-    const { access_token } = response.data
-    localStorage.setItem('access_token', access_token)
-    api.defaults.headers.common.Authorization = `Bearer ${access_token}`
+    await api.post('/auth/login', { email, password })
     await refreshUser()
   }
 
   const register = async (email: string, password: string, fullName?: string) => {
-    const response = await api.post('/auth/register', { email, password, full_name: fullName })
-    const { access_token } = response.data
-    localStorage.setItem('access_token', access_token)
-    api.defaults.headers.common.Authorization = `Bearer ${access_token}`
+    await api.post('/auth/register', { email, password, full_name: fullName })
     await refreshUser()
   }
 
@@ -48,20 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.post('/auth/logout')
     } finally {
-      localStorage.removeItem('access_token')
-      delete api.defaults.headers.common.Authorization
       setUser(null)
     }
   }
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    if (token) {
-      api.defaults.headers.common.Authorization = `Bearer ${token}`
-      refreshUser()
-    } else {
-      setLoading(false)
-    }
+    refreshUser()
   }, [])
 
   return (

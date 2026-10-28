@@ -49,10 +49,35 @@ def test_public_hostname_with_dns(online_guard):
         assert ok
 
 
-def test_owned_allowlist():
+def test_allowlist_cannot_bypass_private_destination():
     guard = TargetGuard(mode=RunMode.ONLINE, owned_allowlist=["myapi.internal.example.com"])
-    ok, _ = guard.check_url("https://myapi.internal.example.com/api")
-    assert ok
+    from unittest.mock import patch
+
+    with patch("socket.getaddrinfo", return_value=[(None, None, None, None, ("10.0.0.7", 443))]):
+        ok, reason = guard.check_url("https://myapi.internal.example.com/api")
+    assert not ok
+    assert "blocked" in reason.lower()
+
+
+def test_invalid_mode_is_rejected_not_downgraded_to_local():
+    with pytest.raises(ValueError):
+        TargetGuard(mode="internet")
+
+
+def test_mixed_public_and_private_dns_answers_are_blocked():
+    guard = TargetGuard(mode=RunMode.ONLINE)
+    from unittest.mock import patch
+
+    with patch(
+        "socket.getaddrinfo",
+        return_value=[
+            (None, None, None, None, ("93.184.216.34", 443)),
+            (None, None, None, None, ("10.0.0.7", 443)),
+        ],
+    ):
+        ok, reason = guard.check_url("https://example.test/api")
+    assert not ok
+    assert "mixed" in reason.lower()
 
 
 def test_url_whitespace_and_auto_protocol(local_guard):

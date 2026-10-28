@@ -17,18 +17,28 @@ class ReportRepository:
             self._collection = get_collection("reports")
         return self._collection
 
-    async def create(self, report: ReportBase, html_path: str | None = None, pdf_path: str | None = None) -> ReportInDB:
+    async def create(
+        self,
+        report: ReportBase,
+        html_path: str | None = None,
+        pdf_path: str | None = None,
+        file_size_bytes: int = 0,
+    ) -> ReportInDB:
         now = datetime.now()
         doc = {
             **report.model_dump(),
             "html_path": html_path,
             "pdf_path": pdf_path,
             "generated_at": now,
-            "file_size_bytes": 0,
+            "file_size_bytes": file_size_bytes,
         }
-        result = await self.collection.insert_one(doc)
-        doc["_id"] = result.inserted_id
-        return ReportInDB(**doc)
+        result = await self.collection.find_one_and_update(
+            {"run_id": report.run_id},
+            {"$set": doc, "$setOnInsert": {"run_id": report.run_id}},
+            upsert=True,
+            return_document=True,
+        )
+        return ReportInDB(**result)
 
     async def get_by_id(self, report_id: ObjectId) -> ReportInDB | None:
         doc = await self.collection.find_one({"_id": report_id})

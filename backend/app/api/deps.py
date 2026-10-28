@@ -3,7 +3,7 @@ from typing import Annotated
 
 import structlog
 from bson import ObjectId
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
 from app.core.security import verify_token
@@ -19,7 +19,12 @@ def _hash_token(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> ObjectId:
+async def get_current_user_id(
+    request: Request,
+    bearer_token: str = Depends(oauth2_scheme),
+    cookie_token: str | None = Cookie(default=None, alias="access_token"),
+) -> ObjectId:
+    token = bearer_token or cookie_token
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

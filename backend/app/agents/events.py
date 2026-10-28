@@ -20,7 +20,7 @@ class AgentEvent:
     session_id: str
     agent: str
     step: str
-    status: Literal["started", "progress", "completed", "failed", "waiting_human"]
+    status: Literal["started", "progress", "completed", "completed_with_errors", "failed", "waiting_human"]
     message: str
     ts: str = field(default_factory=lambda: datetime.now().isoformat())
     data: Any = None
@@ -31,6 +31,7 @@ class AgentEvent:
     rag_used: bool = False
     rag_sources: list[dict] = field(default_factory=list)
     repairs_used: int = 0
+    event_id: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -48,6 +49,7 @@ class AgentEvent:
             "rag_used": self.rag_used,
             "rag_sources": self.rag_sources,
             "repairs_used": self.repairs_used,
+            "event_id": self.event_id,
         }
 
 
@@ -65,19 +67,21 @@ def unsubscribe(session_id: str, q: asyncio.Queue) -> None:
 
 
 async def publish(event: AgentEvent) -> None:
-    """Publish an event to all subscribers of the session."""
+    """Persist an event before publishing it to local SSE subscribers."""
+    try:
+        from app.db.mongo import get_collection
+
+        col = get_collection("agent_events")
+        payload = event.to_dict()
+        payload.pop("event_id", None)
+        result = await col.insert_one(payload)
+        event.event_id = str(result.inserted_id)
+    except Exception as e:
+        logger.warning("Failed to persist agent event", error=str(e))
+
     subs = _subscribers.get(event.session_id, [])
     for q in list(subs):
         try:
             q.put_nowait(event)
         except asyncio.QueueFull:
             logger.warning("Subscriber queue full, dropping event", session_id=event.session_id)
-
-    # Persist to MongoDB
-    try:
-        from app.db.mongo import get_collection
-
-        col = get_collection("agent_events")
-        await col.insert_one(event.to_dict())
-    except Exception as e:
-        logger.warning("Failed to persist agent event", error=str(e))

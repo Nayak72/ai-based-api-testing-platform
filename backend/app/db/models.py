@@ -132,7 +132,7 @@ class ProviderProfileInDB(ProviderProfileBase):
 class AuthConfig(BaseModel):
     type: str = "bearer"
     token_env_var: str | None = None
-    token: str | None = None  # direct token (never stored in plaintext in DB)
+    token: str | None = Field(default=None, exclude=True, repr=False)
 
 
 class APISpecBase(BaseModel):
@@ -262,6 +262,7 @@ class RunConfig(BaseModel):
     max_total_requests: int = 500
     owned_host_attestation: bool = False
     routing: dict | None = None  # LLMRouter config
+    auth_secret_ref: str | None = None  # owner-scoped session holding encrypted auth material
 
 
 class RunSummary(BaseModel):

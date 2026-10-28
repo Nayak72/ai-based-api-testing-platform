@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Card, Button, Modal } from '../components/ui'
 import { sessionsApi, Session } from '../api/endpoints'
@@ -30,10 +30,11 @@ const AGENT_STEPS = [
 export function SessionDetail() {
   const { id } = useParams<{ id: string }>()
   const [session, setSession] = useState<Session | null>(null)
+  const sessionStatus = session?.status
   const [planModalOpen, setPlanModalOpen] = useState(false)
   const [approving, setApproving] = useState(false)
 
-  const fetchSession = async () => {
+  const fetchSession = useCallback(async () => {
     if (!id) return
     try {
       const res = await sessionsApi.get(id)
@@ -44,25 +45,24 @@ export function SessionDetail() {
     } catch {
       toast.error('Failed to load session')
     }
-  }
+  }, [id])
 
   useEffect(() => {
     fetchSession()
-  }, [id])
+  }, [fetchSession])
 
   // Session status is persisted separately from SSE events. Poll while active
   // so the header cannot remain stale during long generation/execution phases.
   useEffect(() => {
-    if (!id || !session || ['completed', 'failed', 'cancelled'].includes(session.status)) return
+    if (!id || !sessionStatus || ['completed', 'completed_with_errors', 'failed', 'cancelled'].includes(sessionStatus)) return
     const timer = window.setInterval(fetchSession, 2000)
     return () => window.clearInterval(timer)
-  }, [id, session?.status])
+  }, [id, sessionStatus, fetchSession])
 
   const { events, isConnected, isCompleted } = useSSE(id || null, {
     onEvent: (event) => {
-      if (event.status === 'waiting_human' || event.step === 'plan') {
+      if (event.status === 'waiting_human') {
         fetchSession()
-        setPlanModalOpen(true)
       }
       if (event.step === 'session_done') {
         fetchSession()
@@ -89,6 +89,7 @@ export function SessionDetail() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
+      case 'completed_with_errors':
         return <CheckCircle className="w-4 h-4 text-brand-600" />
       case 'running':
       case 'progress':

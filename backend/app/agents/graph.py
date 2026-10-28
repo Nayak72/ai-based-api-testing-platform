@@ -67,7 +67,7 @@ async def run_agentic_pipeline(state: SessionState) -> SessionState:
 
         # Update session with plan and waiting_human=True
         await get_collection("sessions").update_one(
-            {"_id": ObjectId(session_id)},
+            {"_id": ObjectId(session_id), "status": {"$ne": "cancelled"}},
             {
                 "$set": {
                     "status": "waiting_approval",
@@ -82,7 +82,7 @@ async def run_agentic_pipeline(state: SessionState) -> SessionState:
         logger.exception("Agentic pipeline failed in ingest/plan phase", error=str(e))
         state.setdefault("errors", []).append(str(e))
         await get_collection("sessions").update_one(
-            {"_id": ObjectId(session_id)},
+            {"_id": ObjectId(session_id), "status": {"$ne": "cancelled"}},
             {"$set": {"status": "failed", "error": str(e)}},
         )
         await publish(
@@ -168,7 +168,10 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
                 categories=categories,
                 base_url_override=state.get("base_url") or None,
                 mode=mode,
-                intensity=state.get("intensity", "normal"),
+                intensity=state.get("intensity", "standard"),
+                owned_host_attestation=state.get("owned_host_attestation", False),
+                routing=state.get("routing") or None,
+                auth_secret_ref=session_id,
             )
             req = RunCreateRequest(
                 spec_id=spec_id,
@@ -194,12 +197,15 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
         )
         orchestrator = RunOrchestrator()
         await orchestrator.execute_run(state["run_id"], user_id)
+        run = await run_repository.get_by_id(ObjectId(state["run_id"]), ObjectId(user_id))
+        if not run or run.status in ("failed", "cancelled"):
+            raise RuntimeError("Test execution did not complete successfully")
         await publish(
             AgentEvent(
                 session_id=session_id,
                 agent="executor",
                 step="execute",
-                status="completed",
+                status=final_status,
                 message="Test execution finished",
             )
         )
@@ -209,17 +215,20 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
         state = await ReporterAgent().run(state)
 
         # Mark session completed
-        await get_collection("sessions").update_one(
-            {"_id": ObjectId(session_id)},
-            {"$set": {"status": "completed"}},
+        final_status = "completed_with_errors" if run.status == "completed_with_errors" else "completed"
+        session_update = await get_collection("sessions").update_one(
+            {"_id": ObjectId(session_id), "status": "running"},
+            {"$set": {"status": final_status}},
         )
+        if session_update.modified_count != 1:
+            raise RuntimeError("Session was cancelled before completion")
         await publish(
             AgentEvent(
                 session_id=session_id,
                 agent="reporter",
                 step="session_done",
                 status="completed",
-                message="Session completed successfully",
+                message="Session completed with errors" if final_status == "completed_with_errors" else "Session completed successfully",
                 data={"run_id": state.get("run_id")},
             )
         )
@@ -229,7 +238,7 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
         logger.exception("Pipeline resume failed", error=str(e))
         state.setdefault("errors", []).append(str(e))
         await get_collection("sessions").update_one(
-            {"_id": ObjectId(session_id)},
+            {"_id": ObjectId(session_id), "status": {"$ne": "cancelled"}},
             {"$set": {"status": "failed", "error": str(e)}},
         )
         await publish(

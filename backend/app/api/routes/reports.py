@@ -35,8 +35,8 @@ async def generate_report(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    if run.status != "completed":
-        raise HTTPException(status_code=400, detail="Run must be completed to generate report")
+    if run.status not in ("completed", "completed_with_errors"):
+        raise HTTPException(status_code=400, detail="Run must be in a reportable terminal state")
 
     generator = ReportGenerator()
     background_tasks.add_task(generator.generate, run_obj_id, user_id, request.format)
