@@ -88,9 +88,7 @@ class SpecRepository:
         update = {"status": status, "updated_at": datetime.now()}
         if error:
             update["parse_error"] = error
-        result = await self.collection.find_one_and_update(
-            {"_id": spec_id}, {"$set": update}, return_document=True
-        )
+        result = await self.collection.find_one_and_update({"_id": spec_id}, {"$set": update}, return_document=True)
         return APISpecInDB(**result) if result else None
 
     async def delete(self, spec_id: ObjectId, user_id: ObjectId) -> bool:

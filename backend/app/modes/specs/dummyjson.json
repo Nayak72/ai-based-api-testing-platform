@@ -1,0 +1,12 @@
+{
+  "openapi": "3.0.0",
+  "info": {"title": "DummyJSON", "version": "1.0.0"},
+  "servers": [{"url": "https://dummyjson.com"}],
+  "paths": {
+    "/products": {"get": {"summary": "List products", "parameters": [{"name": "limit", "in": "query", "schema": {"type": "integer"}}, {"name": "skip", "in": "query", "schema": {"type": "integer"}}], "responses": {"200": {"description": "Products"}}}},
+    "/products/{id}": {"get": {"summary": "Get product", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Product"}}}},
+    "/users": {"get": {"summary": "List users", "responses": {"200": {"description": "Users"}}}},
+    "/auth/login": {"post": {"summary": "Login", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"username": {"type": "string"}, "password": {"type": "string"}}}}}}, "responses": {"200": {"description": "Token"}}}}
+  }
+}
+

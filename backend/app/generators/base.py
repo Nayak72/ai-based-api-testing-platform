@@ -1,6 +1,7 @@
 import hashlib
 import json
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import structlog
 from bson import ObjectId
@@ -8,10 +9,18 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.ai import AIOrchestrator, GenerationRequest, ProviderError
 from app.config import get_settings
-from app.db.models import GenerationCache, TestCaseCreate, TestCaseMetadata
+from app.db.models import (
+    ExpectedResponse,
+    GenerationCache,
+    RequestTemplate,
+    TestCaseCreate,
+    TestCaseMetadata,
+)
 from app.db.repositories import generation_cache_repository
 
 logger = structlog.get_logger()
+
+PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 class BaseGenerator(ABC):
@@ -23,7 +32,7 @@ class BaseGenerator(ABC):
         self.ai = ai_orchestrator
         self.settings = get_settings()
         self.jinja_env = Environment(
-            loader=FileSystemLoader("backend/app/generators/prompts"),
+            loader=FileSystemLoader(str(PROMPTS_DIR)),
             autoescape=select_autoescape(),
             trim_blocks=True,
             lstrip_blocks=True,
@@ -45,6 +54,50 @@ class BaseGenerator(ABC):
     def _compute_prompt_hash(self, prompt: str) -> str:
         return f"sha256:{hashlib.sha256(prompt.encode()).hexdigest()}"
 
+    @classmethod
+    def _parse_test_cases(
+        cls,
+        content: str,
+        endpoint_id: str,
+        spec_id: ObjectId,
+        category: str,
+        subcategory_default: str,
+        owasp_mapping: dict | None = None,
+    ) -> list[TestCaseCreate]:
+        """Shared parser for all generators. Reduces duplication across functional.py."""
+        import json as _json
+
+        data = _json.loads(content)
+        test_cases = []
+        for item in data.get("test_cases", []):
+            subcat = item.get("subcategory", subcategory_default)
+            owasp = None
+            if owasp_mapping:
+                owasp = owasp_mapping.get(subcat) or item.get("metadata", {}).get("owasp_category")
+            else:
+                owasp = item.get("metadata", {}).get("owasp_category")
+            severity = item.get("metadata", {}).get("severity", "medium")
+            tc = TestCaseCreate(
+                spec_id=spec_id,
+                endpoint_id=endpoint_id,
+                category=category,
+                subcategory=subcat,
+                title=item["title"],
+                description=item["description"],
+                request=RequestTemplate(**item["request"]),
+                expected=ExpectedResponse(**item["expected"]),
+                metadata=TestCaseMetadata(
+                    owasp_category=owasp,
+                    severity=severity,
+                    generated_by="",
+                    generation_prompt_hash="",
+                    tokens_used=0,
+                    request_hash="",
+                ),
+            )
+            test_cases.append(tc)
+        return test_cases
+
     def _compute_request_hash(self, request: dict) -> str:
         normalized = json.dumps(request, sort_keys=True, separators=(",", ":"))
         return f"sha256:{hashlib.sha256(normalized.encode()).hexdigest()}"
@@ -57,9 +110,17 @@ class BaseGenerator(ABC):
         subcategory: str,
         model: str | None = None,
     ) -> list[TestCaseCreate]:
-        cached = await generation_cache_repository.get(spec_id, endpoint["endpoint_id"], self.CATEGORY, self.PROMPT_VERSION, model)
+        cached = await generation_cache_repository.get(
+            spec_id, endpoint["endpoint_id"], self.CATEGORY, self.PROMPT_VERSION, model
+        )
         if cached:
-            logger.info("Cache hit", spec_id=str(spec_id), endpoint_id=endpoint["endpoint_id"], category=self.CATEGORY, model=model)
+            logger.info(
+                "Cache hit",
+                spec_id=str(spec_id),
+                endpoint_id=endpoint["endpoint_id"],
+                category=self.CATEGORY,
+                model=model,
+            )
             return [TestCaseCreate(**tc) for tc in cached.test_cases]
 
         prompt = self._build_prompt(endpoint, spec)
@@ -77,7 +138,9 @@ class BaseGenerator(ABC):
         try:
             response = await self.ai.generate(request)
         except ProviderError as e:
-            logger.exception("Generation failed", category=self.CATEGORY, endpoint_id=endpoint["endpoint_id"], error=str(e))
+            logger.exception(
+                "Generation failed", category=self.CATEGORY, endpoint_id=endpoint["endpoint_id"], error=str(e)
+            )
             raise
 
         test_cases = self.parse_response(response.content, endpoint["endpoint_id"], spec_id)

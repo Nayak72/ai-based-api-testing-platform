@@ -3,7 +3,7 @@ import json
 import structlog
 from bson import ObjectId
 
-from app.ai import AIOrchestrator, GenerationRequest, ProviderError
+from app.ai import GenerationRequest, ProviderError, create_orchestrator
 from app.db.models import LLMAnalysis, TestResultInDB
 from app.db.repositories import result_repository
 
@@ -11,19 +11,20 @@ logger = structlog.get_logger()
 
 
 class ResultAnalyzer:
-    def __init__(self):
-        self.ai: AIOrchestrator | None = None
-        self._initialized = False
-
-    async def _ensure_initialized(self):
-        if not self._initialized or self.ai is None:
-            from app.ai import create_orchestrator
-            self.ai = create_orchestrator()
-            self._initialized = True
+    def __init__(
+        self,
+        primary_provider: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+    ):
+        self.ai = create_orchestrator(
+            primary_provider=primary_provider,
+            model=model,
+            api_key=api_key,
+        )
+        self._initialized = True
 
     async def analyze_run(self, run_id: ObjectId):
-        await self._ensure_initialized()
-
         results = await result_repository.list_by_run(run_id, limit=10000)
         logger.info("Starting analysis", run_id=str(run_id), results=len(results))
 
@@ -38,7 +39,6 @@ class ResultAnalyzer:
         logger.info("Analysis completed", run_id=str(run_id))
 
     async def analyze_result(self, result: TestResultInDB) -> LLMAnalysis:
-        await self._ensure_initialized()
         prompt = self._build_analysis_prompt(result)
 
         request = GenerationRequest(
@@ -50,8 +50,6 @@ class ResultAnalyzer:
         )
 
         try:
-            if self.ai is None:
-                raise ProviderError(code="not_initialized", message="AI Orchestrator not initialized")
             response = await self.ai.generate(request)
             return self._parse_analysis(response.content)
         except ProviderError as e:

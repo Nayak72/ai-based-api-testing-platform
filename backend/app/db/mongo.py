@@ -82,4 +82,14 @@ async def create_indexes() -> None:
     await db.reports.create_index("run_id", unique=True)
     await db.reports.create_index([("user_id", 1), ("generated_at", -1)])
 
+    # sessions
+    await db.sessions.create_index([("user_id", 1), ("created_at", -1)])
+    await db.sessions.create_index("status")
+
+    # agent_events
+    await db.agent_events.create_index([("session_id", 1), ("ts", 1)])
+
+    # provider_profiles
+    await db.provider_profiles.create_index([("user_id", 1)])
+
     logger.info("All indexes created")

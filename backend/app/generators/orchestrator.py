@@ -1,4 +1,3 @@
-
 import structlog
 
 from app.ai import create_orchestrator
@@ -8,6 +7,7 @@ from app.generators.functional import (
     MalformedGenerator,
     SecurityGenerator,
 )
+from app.parsers import extract_endpoints
 
 logger = structlog.get_logger()
 
@@ -52,8 +52,10 @@ class GenerationOrchestrator:
             logger.error("Spec not found or not parsed", spec_id=spec_id)
             return
 
-        endpoints = self._extract_endpoints(spec.parsed_spec)
-        logger.info("Starting generation", spec_id=spec_id, endpoints=len(endpoints), categories=categories, model=target_model)
+        endpoints = extract_endpoints(spec.parsed_spec)
+        logger.info(
+            "Starting generation", spec_id=spec_id, endpoints=len(endpoints), categories=categories, model=target_model
+        )
 
         for endpoint in endpoints:
             for category in categories:
@@ -64,7 +66,7 @@ class GenerationOrchestrator:
 
                 try:
                     test_cases = await generator.generate_for_endpoint(
-                        spec_id=str(spec_id),
+                        spec_id=ObjectId(spec_id),
                         endpoint=endpoint,
                         spec=spec.parsed_spec,
                         subcategory=generator.SUBCATEGORIES[0],
@@ -76,24 +78,14 @@ class GenerationOrchestrator:
                         logger.info("Test cases saved", count=len(test_cases), category=category)
 
                 except Exception as e:
-                    logger.error("Generation failed for endpoint", endpoint_id=endpoint["endpoint_id"], category=category, error=str(e))
+                    logger.error(
+                        "Generation failed for endpoint",
+                        endpoint_id=endpoint["endpoint_id"],
+                        category=category,
+                        error=str(e),
+                    )
 
         logger.info("Generation completed", spec_id=spec_id)
-
-    def _extract_endpoints(self, parsed_spec: dict) -> list[dict]:
-        endpoints = []
-        paths = parsed_spec.get("paths", {})
-        for path, methods in paths.items():
-            for method, details in methods.items():
-                if method.lower() in ("get", "post", "put", "patch", "delete", "head", "options", "trace"):
-                    endpoint_id = f"{method.lower()}_{path.replace('/', '_').strip('_')}"
-                    endpoints.append({
-                        "endpoint_id": endpoint_id,
-                        "method": method.upper(),
-                        "path": path,
-                        "operation": details,
-                    })
-        return endpoints
 
     async def close(self) -> None:
         for provider in self.ai_orchestrator.providers:

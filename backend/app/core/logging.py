@@ -28,15 +28,14 @@ def setup_logging() -> None:
 
     structlog.configure(
         processors=processors,
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(__import__("logging"), settings.log_level.upper())
-        ),
+        wrapper_class=structlog.make_filtering_bound_logger(getattr(__import__("logging"), settings.log_level.upper())),
         context_class=dict,
         logger_factory=structlog.WriteLoggerFactory(file=sys.stdout),
         cache_logger_on_first_use=True,
     )
 
     import logging
+
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,

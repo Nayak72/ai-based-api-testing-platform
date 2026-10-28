@@ -38,6 +38,13 @@ async def create_run(
     if spec.status != "ready":
         raise HTTPException(status_code=400, detail="Spec not ready for execution")
 
+    # Validate base_url: if spec has unresolved {{baseUrl}}, require override
+    if spec.base_url and "{{baseUrl}}" in spec.base_url and not (request.config and request.config.base_url_override):
+        raise HTTPException(
+            status_code=400,
+            detail="Spec base URL contains unresolved {{baseUrl}} variable. Provide base_url_override in run config or resolve it in the Postman collection variables.",
+        )
+
     config = request.config or RunConfigSchema()
     run_create = RunCreateRequest(
         spec_id=request.spec_id,
@@ -296,6 +303,7 @@ async def analyze_run(run_id: str, user_id: CurrentUserId, background_tasks: Bac
         raise HTTPException(status_code=400, detail="Run must be completed to analyze")
 
     from app.analyzer.engine import ResultAnalyzer
+
     analyzer = ResultAnalyzer()
     background_tasks.add_task(analyzer.analyze_run, obj_id)
 

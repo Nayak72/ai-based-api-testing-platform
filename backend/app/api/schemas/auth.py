@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -34,10 +33,8 @@ class UserResponse(BaseModel):
     is_superuser: bool
     created_at: datetime
     last_login: datetime | None
-    ai_settings: dict[str, Any] = Field(default_factory=dict)
 
 
 class UserUpdateRequest(BaseModel):
     full_name: str | None = Field(None, max_length=100)
     password: str | None = Field(None, min_length=8, max_length=128)
-    ai_settings: dict[str, Any] | None = None

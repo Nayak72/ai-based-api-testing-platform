@@ -1,0 +1,45 @@
+[
+  {
+    "id": "bola_users",
+    "endpoint": "GET /users/{user_id}",
+    "owasp": "API1:2023",
+    "description": "Any authenticated user can read any other user's data (no ownership check — auth_user_id is never compared to user_id)"
+  },
+  {
+    "id": "bfla_admin_reset",
+    "endpoint": "POST /admin/reset",
+    "owasp": "API5:2023",
+    "description": "Normal user can invoke the admin reset endpoint — no role check is performed"
+  },
+  {
+    "id": "bopla_role",
+    "endpoint": "PATCH /users/{user_id}",
+    "owasp": "API3:2023",
+    "description": "Accepts any field in the body including 'role', enabling mass assignment privilege escalation"
+  },
+  {
+    "id": "no_pagination_cap",
+    "endpoint": "GET /products",
+    "owasp": "API4:2023",
+    "description": "No server-side cap on the 'limit' parameter — a client can request all 200 products with limit=9999"
+  },
+  {
+    "id": "verbose_debug",
+    "endpoint": "GET /debug",
+    "owasp": "API8:2023",
+    "description": "Returns internal environment info, simulated stack trace, and request headers — classic misconfiguration"
+  },
+  {
+    "id": "ssrf_fetch_simulated",
+    "endpoint": "POST /fetch",
+    "owasp": "API7:2023",
+    "description": "Accepts an arbitrary URL and returns different responses for internal vs external URLs (SSRF pattern — simulated, does not actually fetch)"
+  },
+  {
+    "id": "no_rate_limit_login",
+    "endpoint": "POST /login",
+    "owasp": "API4:2023",
+    "description": "No brute-force protection or rate limiting on the login endpoint"
+  }
+]
+

@@ -39,9 +39,7 @@ class Settings(BaseSettings):
     mongodb_db: str = "api_testing"
 
     # JWT Auth
-    secret_key: str = Field(
-        default="your-super-secret-key-at-least-32-characters-long", min_length=32
-    )
+    secret_key: str = Field(default="your-super-secret-key-at-least-32-characters-long", min_length=32)
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
@@ -78,12 +76,37 @@ class Settings(BaseSettings):
     reports_dir: str = "./data/reports"
     report_disclaimer: str = "AI-assisted testing, not a certified security audit"
 
+    # Secrets Encryption
+    secrets_encryption_key: str | None = None
+
     # CORS
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     # Logging
     log_level: str = "INFO"
     log_json: bool = False
+
+    # RAG / Vector Store
+    vector_dir: str = "./data/chroma"
+    embedding_provider: str = "sentence_transformers"
+    embedding_model: str = "all-MiniLM-L6-v2"
+
+    # Agentic Mode
+    agentic_mode: bool = False
+    local_llm_base_url: str = "http://localhost:11434/v1"
+    local_llm_model: str = "llama3"
+
+    # Target Safety
+    owned_host_allowlist: list[str] = []
+    online_max_rps: float = 2.0
+    online_max_concurrency: int = 3
+
+    @field_validator("owned_host_allowlist", mode="before")
+    @classmethod
+    def parse_allowlist(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [h.strip() for h in v.split(",") if h.strip()]
+        return v
 
 
 @lru_cache

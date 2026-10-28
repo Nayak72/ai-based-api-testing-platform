@@ -17,18 +17,19 @@ def evaluate_assertions(
     body: str | None,
     response_schema: dict | None = None,
     expected_status_code: int | None = None,
+    duration_ms: int | None = None,
 ) -> list[AssertionResult]:
     results = []
 
     # Always evaluate status code if expected_status_code is provided
     if expected_status_code is not None:
         status_assertion = Assertion(type="status_code", path="", operator="eq", value=expected_status_code)
-        result = _evaluate_single_assertion(status_assertion, status_code, headers, body, response_schema)
+        result = _evaluate_single_assertion(status_assertion, status_code, headers, body, response_schema, duration_ms)
         results.append(AssertionResult(assertion=status_assertion, result=result))
 
     for assertion in assertions:
         try:
-            result = _evaluate_single_assertion(assertion, status_code, headers, body, response_schema)
+            result = _evaluate_single_assertion(assertion, status_code, headers, body, response_schema, duration_ms)
             results.append(AssertionResult(assertion=assertion, result=result))
         except Exception as e:
             logger.warning("Assertion evaluation error", assertion=assertion.model_dump(), error=str(e))
@@ -43,6 +44,7 @@ def _evaluate_single_assertion(
     headers: dict,
     body: str | None,
     response_schema: dict | None = None,
+    duration_ms: int | None = None,
 ) -> bool:
     if assertion.type == "status_code":
         return _compare(status_code, assertion.operator, assertion.value)
@@ -86,7 +88,9 @@ def _evaluate_single_assertion(
             return False
 
     elif assertion.type == "response_time":
-        return False
+        if duration_ms is None:
+            return False
+        return _compare(duration_ms, assertion.operator, assertion.value)
 
     return False
 
@@ -114,6 +118,7 @@ def _compare(actual: Any, operator: str, expected: Any) -> bool:
         return isinstance(actual, str) and actual.endswith(str(expected))
     if operator == "matches":
         import re
+
         return bool(re.match(str(expected), str(actual)))
     if operator == "is_array":
         return isinstance(actual, list)

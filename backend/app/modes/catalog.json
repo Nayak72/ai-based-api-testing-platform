@@ -1,0 +1,43 @@
+[
+  {
+    "id": "jsonplaceholder",
+    "name": "JSONPlaceholder",
+    "base_url": "https://jsonplaceholder.typicode.com",
+    "spec_path": "specs/jsonplaceholder.json",
+    "auth": "none",
+    "notes": "Free fake REST API for testing. Verify it is still online before use. Check their terms of service.",
+    "safe_methods_only": false,
+    "rate_limit_rps": 2
+  },
+  {
+    "id": "httpbin",
+    "name": "httpbin",
+    "base_url": "https://httpbin.org",
+    "spec_path": "specs/httpbin.json",
+    "auth": "none",
+    "notes": "HTTP request/response testing service. Verify availability and terms before use.",
+    "safe_methods_only": false,
+    "rate_limit_rps": 2
+  },
+  {
+    "id": "dummyjson",
+    "name": "DummyJSON",
+    "base_url": "https://dummyjson.com",
+    "spec_path": "specs/dummyjson.json",
+    "auth": "none",
+    "notes": "Dummy JSON API for testing. Check their terms of service and usage policies.",
+    "safe_methods_only": false,
+    "rate_limit_rps": 2
+  },
+  {
+    "id": "pokeapi",
+    "name": "PokeAPI (read-only)",
+    "base_url": "https://pokeapi.co/api/v2",
+    "spec_path": "specs/pokeapi.json",
+    "auth": "none",
+    "notes": "Read-only public Pokemon data API. No write operations.",
+    "safe_methods_only": true,
+    "rate_limit_rps": 1
+  }
+]
+

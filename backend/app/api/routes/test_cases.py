@@ -167,6 +167,7 @@ async def update_test_case(spec_id: str, test_case_id: str, user_id: CurrentUser
         raise HTTPException(status_code=400, detail="No fields to update")
 
     from datetime import datetime
+
     update_data["updated_at"] = datetime.now()
 
     result = await test_case_repository.collection.find_one_and_update(

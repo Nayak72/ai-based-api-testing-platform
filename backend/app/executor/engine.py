@@ -92,12 +92,35 @@ class TestExecutor:
             base_url = ""
 
         url = f"{base_url.rstrip('/')}{test_case.request.path}"
+
+        # TargetGuard check before sending any request
+        try:
+            from app.safety.target_guard import TargetGuard, TargetPolicy
+
+            mode = getattr(run_context.config, "mode", "local")
+            policy = TargetPolicy.ONLINE if mode == "online" else TargetPolicy.LOCAL
+            guard = TargetGuard()
+            decision = guard.check(url, policy)
+            if not decision.allowed:
+                return TestResultBase(
+                    run_id=run_context.run_id,
+                    test_case_id=test_case.id,
+                    endpoint_id=test_case.endpoint_id,
+                    category=test_case.category,
+                    status="blocked",
+                    request_sent=RequestSent(method=test_case.request.method, url=url, headers={}),
+                    response=ResponseReceived(status_code=0, duration_ms=0),
+                    error=f"Blocked by TargetGuard: {decision.reason}",
+                )
+        except Exception as guard_err:
+            logger.warning("TargetGuard check failed (allowing)", url=url, error=str(guard_err))
         headers = dict(test_case.request.headers)
         query_params = dict(test_case.request.query_params)
 
         auth_config = run_context.config.auth_override or run_context.config.spec_auth_config
         if auth_config and auth_config.token_env_var:
             import os
+
             token = os.environ.get(auth_config.token_env_var)
             if token:
                 if auth_config.type == "bearer":
@@ -113,13 +136,27 @@ class TestExecutor:
         for attempt in range(self.max_retries + 1):
             try:
                 start = time.perf_counter()
-                response = await self.client.request(
-                    method=test_case.request.method,
-                    url=url,
-                    headers=headers,
-                    params=query_params,
-                    json=test_case.request.body if test_case.request.body else None,
-                )
+
+                # Use raw_body if provided (for malformed JSON, wrong content-type tests)
+                if test_case.request.raw_body is not None:
+                    content = test_case.request.raw_body
+                    if test_case.request.content_type:
+                        headers["Content-Type"] = test_case.request.content_type
+                    response = await self.client.request(
+                        method=test_case.request.method,
+                        url=url,
+                        headers=headers,
+                        params=query_params,
+                        content=content,
+                    )
+                else:
+                    response = await self.client.request(
+                        method=test_case.request.method,
+                        url=url,
+                        headers=headers,
+                        params=query_params,
+                        json=test_case.request.body if test_case.request.body is not None else None,
+                    )
                 duration_ms = int((time.perf_counter() - start) * 1000)
 
                 response_body = response.read()
@@ -131,7 +168,7 @@ class TestExecutor:
                     body_hash = f"sha256:{hashlib.sha256(response_body).hexdigest()}"
                     if len(response_body) > self.max_response_body_bytes:
                         body_truncated = True
-                        response_data = response_body[:self.max_response_body_bytes].decode("utf-8", errors="replace")
+                        response_data = response_body[: self.max_response_body_bytes].decode("utf-8", errors="replace")
                     else:
                         response_data = response_body.decode("utf-8", errors="replace")
 
@@ -142,6 +179,7 @@ class TestExecutor:
                     response_data,
                     test_case.expected.response_schema,
                     test_case.expected.status_code,
+                    duration_ms,
                 )
 
                 status = "passed" if all(a.result for a in assertions) else "failed"
@@ -156,7 +194,9 @@ class TestExecutor:
                         method=test_case.request.method,
                         url=str(response.url),
                         headers=masked_headers,
-                        body=test_case.request.body,
+                        body=test_case.request.raw_body
+                        if test_case.request.raw_body is not None
+                        else test_case.request.body,
                     ),
                     response=ResponseReceived(
                         status_code=response.status_code,
@@ -173,12 +213,12 @@ class TestExecutor:
             except httpx.TimeoutException as e:
                 last_error = e
                 if attempt < self.max_retries:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     continue
             except httpx.NetworkError as e:
                 last_error = e
                 if attempt < self.max_retries:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     continue
             except Exception as e:
                 last_error = e
@@ -190,7 +230,12 @@ class TestExecutor:
             endpoint_id=test_case.endpoint_id,
             category=test_case.category,
             status="error",
-            request_sent=RequestSent(method=test_case.request.method, url=url, headers=masked_headers, body=test_case.request.body),
+            request_sent=RequestSent(
+                method=test_case.request.method,
+                url=url,
+                headers=masked_headers,
+                body=test_case.request.raw_body if test_case.request.raw_body is not None else test_case.request.body,
+            ),
             response=ResponseReceived(status_code=0, duration_ms=0),
             error=str(last_error),
             attempt=attempt + 1,

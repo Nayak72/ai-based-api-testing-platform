@@ -10,6 +10,10 @@ import { RunHistory } from './pages/RunHistory'
 import { ReportView } from './pages/ReportView'
 import { ReportsList } from './pages/ReportsList'
 import { Settings } from './pages/Settings'
+import { QuickTest } from './pages/QuickTest'
+import { KnowledgeBase } from './pages/KnowledgeBase'
+import { NewSession } from './pages/NewSession'
+import { SessionDetail } from './pages/SessionDetail'
 import { LoginForm } from './auth/LoginForm'
 import { RegisterForm } from './auth/RegisterForm'
 import { useAuth } from './hooks/useAuth'
@@ -62,6 +66,10 @@ export function App() {
             <Layout>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/sessions/new" element={<NewSession />} />
+                <Route path="/sessions/:id" element={<SessionDetail />} />
+                <Route path="/quick-test" element={<QuickTest />} />
+                <Route path="/knowledge-base" element={<KnowledgeBase />} />
                 <Route path="/specs" element={<SpecsList />} />
                 <Route path="/specs/upload" element={<SpecUpload />} />
                 <Route path="/specs/:specId" element={<SpecDetail />} />

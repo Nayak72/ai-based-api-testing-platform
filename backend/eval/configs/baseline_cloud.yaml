@@ -1,0 +1,9 @@
+name: baseline-cloud-vulnshop
+spec_id: ""  # Fill in with imported VulnShop spec ID
+auth_token: ""
+run_config:
+  concurrency: 5
+  timeout_seconds: 30
+  categories: ["functional", "security"]
+  base_url_override: "http://localhost:8001"
+

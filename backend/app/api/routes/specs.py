@@ -1,5 +1,5 @@
 import hashlib
-
+import httpx
 import structlog
 from bson import ObjectId
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
@@ -14,8 +14,8 @@ from app.api.schemas.specs import (
     SpecUploadRequest,
 )
 from app.db.repositories import spec_repository
-from app.parsers.openapi import parse_openapi_spec
-from app.parsers.postman import parse_postman_collection
+from app.parsers import extract_endpoints, parse_openapi_spec, parse_postman_collection
+from app.safety.target_guard import RunMode, TargetGuard
 
 logger = structlog.get_logger()
 
@@ -199,25 +199,23 @@ async def list_endpoints(spec_id: str, user_id: CurrentUserId):
     if spec.status != "ready" or not spec.parsed_spec:
         raise HTTPException(status_code=400, detail="Spec not parsed yet")
 
-    paths = spec.parsed_spec.get("paths", {})
+    endpoints_data = extract_endpoints(spec.parsed_spec)
     endpoints = []
-    for path, methods in paths.items():
-        for method, details in methods.items():
-            if method.lower() in ("get", "post", "put", "patch", "delete", "head", "options", "trace"):
-                endpoint_id = f"{method.lower()}_{path.replace('/', '_').strip('_')}"
-                endpoints.append(
-                    EndpointInfo(
-                        endpoint_id=endpoint_id,
-                        method=method.upper(),
-                        path=path,
-                        summary=details.get("summary"),
-                        description=details.get("description"),
-                        parameters=details.get("parameters", []),
-                        request_body=details.get("requestBody"),
-                        responses=details.get("responses", {}),
-                        security=details.get("security", spec.parsed_spec.get("security", [])),
-                    )
-                )
+    for ep in endpoints_data:
+        details = ep["operation"]
+        endpoints.append(
+            EndpointInfo(
+                endpoint_id=ep["endpoint_id"],
+                method=ep["method"],
+                path=ep["path"],
+                summary=details.get("summary"),
+                description=details.get("description"),
+                parameters=details.get("parameters", []),
+                request_body=details.get("requestBody"),
+                responses=details.get("responses", {}),
+                security=details.get("security", spec.parsed_spec.get("security", [])),
+            )
+        )
 
     return EndpointListResponse(spec_id=spec_id, endpoints=endpoints, total=len(endpoints))
 
@@ -234,3 +232,80 @@ async def delete_spec(spec_id: str, user_id: CurrentUserId):
         raise HTTPException(status_code=404, detail="Spec not found")
 
     logger.info("Spec deleted", spec_id=spec_id, user_id=str(user_id))
+
+
+@router.post("/from-url", response_model=SpecResponse, status_code=status.HTTP_201_CREATED)
+async def import_spec_from_url(
+    body: dict,
+    user_id: CurrentUserId,
+):
+    """Fetch an OpenAPI spec from a URL and import it."""
+    url: str = body.get("url", "").strip()
+    if not url:
+        raise HTTPException(status_code=422, detail="url is required")
+
+    mode_str = body.get("mode", "local").upper()
+    try:
+        mode = RunMode[mode_str]
+    except KeyError:
+        mode = RunMode.LOCAL
+
+    guard = TargetGuard(mode=mode, owned_allowlist=[])
+    allowed, reason = guard.check_url(url)
+    if not allowed:
+        raise HTTPException(status_code=403, detail=f"Target blocked: {reason}")
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"Accept": "application/json, application/yaml, text/plain"})
+            resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {e}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=400, detail=f"Request error: {e}")
+
+    content = resp.text
+    if len(content.encode("utf-8")) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Spec file too large (max 5 MB)")
+
+    ct = resp.headers.get("content-type", "")
+    if "yaml" in ct or url.endswith(".yaml") or url.endswith(".yml"):
+        source_format = "yaml"
+    else:
+        source_format = "json"
+
+    name = body.get("name") or url.split("/")[-1] or "imported-spec"
+    spec_hash = compute_spec_hash(content)
+
+    spec_create = SpecUploadRequest(
+        name=name,
+        source_type="openapi",
+        source_format=source_format,
+        auth_config=None,
+        raw_content=content,
+    )
+
+    spec = await spec_repository.create(spec_create, user_id, spec_hash)
+
+    # Automatically parse
+    try:
+        parsed, endpoints, version, base_url = await parse_openapi_spec(content)
+        await spec_repository.update_parsed(spec.id, parsed, len(endpoints), version, base_url)
+        spec = await spec_repository.get_by_id(spec.id, user_id)
+    except Exception as e:
+        await spec_repository.update_status(spec.id, "error", str(e))
+        logger.warning("Failed to auto-parse imported spec", error=str(e))
+
+    return SpecResponse(
+        id=str(spec.id),
+        name=spec.name,
+        source_type=spec.source_type,
+        source_format=spec.source_format,
+        endpoints_count=spec.endpoints_count,
+        spec_version=spec.spec_version,
+        base_url=spec.base_url,
+        status=spec.status,
+        parse_error=spec.parse_error,
+        created_at=spec.created_at,
+        updated_at=spec.updated_at,
+    )

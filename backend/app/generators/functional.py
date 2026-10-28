@@ -1,13 +1,8 @@
-import json
-
 import structlog
 from bson import ObjectId
 
 from app.db.models import (
-    ExpectedResponse,
-    RequestTemplate,
     TestCaseCreate,
-    TestCaseMetadata,
 )
 from app.generators.base import BaseGenerator
 
@@ -37,29 +32,7 @@ Output format: {"test_cases": [...]}"""
         return "functional.j2"
 
     def parse_response(self, content: str, endpoint_id: str, spec_id: ObjectId) -> list[TestCaseCreate]:
-        data = json.loads(content)
-        test_cases = []
-        for item in data.get("test_cases", []):
-            tc = TestCaseCreate(
-                spec_id=spec_id,
-                endpoint_id=endpoint_id,
-                category=self.CATEGORY,
-                subcategory=item["subcategory"],
-                title=item["title"],
-                description=item["description"],
-                request=RequestTemplate(**item["request"]),
-                expected=ExpectedResponse(**item["expected"]),
-                metadata=TestCaseMetadata(
-                    owasp_category=item["metadata"].get("owasp_category"),
-                    severity=item["metadata"].get("severity", "medium"),
-                    generated_by="",
-                    generation_prompt_hash="",
-                    tokens_used=0,
-                    request_hash="",
-                ),
-            )
-            test_cases.append(tc)
-        return test_cases
+        return self._parse_test_cases(content, endpoint_id, spec_id, self.CATEGORY, "valid_payload")
 
 
 class EdgeGenerator(BaseGenerator):
@@ -86,34 +59,21 @@ Output format: {"test_cases": [...]}"""
         return "edge.j2"
 
     def parse_response(self, content: str, endpoint_id: str, spec_id: ObjectId) -> list[TestCaseCreate]:
-        data = json.loads(content)
-        test_cases = []
-        for item in data.get("test_cases", []):
-            tc = TestCaseCreate(
-                spec_id=spec_id,
-                endpoint_id=endpoint_id,
-                category=self.CATEGORY,
-                subcategory=item["subcategory"],
-                title=item["title"],
-                description=item["description"],
-                request=RequestTemplate(**item["request"]),
-                expected=ExpectedResponse(**item["expected"]),
-                metadata=TestCaseMetadata(
-                    owasp_category=item["metadata"].get("owasp_category"),
-                    severity=item["metadata"].get("severity", "medium"),
-                    generated_by="",
-                    generation_prompt_hash="",
-                    tokens_used=0,
-                    request_hash="",
-                ),
-            )
-            test_cases.append(tc)
-        return test_cases
+        return self._parse_test_cases(content, endpoint_id, spec_id, self.CATEGORY, "boundary_min")
 
 
 class MalformedGenerator(BaseGenerator):
     CATEGORY = "malformed"
-    SUBCATEGORIES = ["missing_required", "wrong_type", "invalid_enum", "malformed_json", "oversized_payload", "invalid_content_type", "path_traversal", "duplicate_params"]
+    SUBCATEGORIES = [
+        "missing_required",
+        "wrong_type",
+        "invalid_enum",
+        "malformed_json",
+        "oversized_payload",
+        "invalid_content_type",
+        "path_traversal",
+        "duplicate_params",
+    ]
     PROMPT_VERSION = "v1"
 
     def get_system_prompt(self) -> str:
@@ -135,36 +95,22 @@ Output format: {"test_cases": [...]}"""
         return "malformed.j2"
 
     def parse_response(self, content: str, endpoint_id: str, spec_id: ObjectId) -> list[TestCaseCreate]:
-        data = json.loads(content)
-        test_cases = []
-        for item in data.get("test_cases", []):
-            tc = TestCaseCreate(
-                spec_id=spec_id,
-                endpoint_id=endpoint_id,
-                category=self.CATEGORY,
-                subcategory=item["subcategory"],
-                title=item["title"],
-                description=item["description"],
-                request=RequestTemplate(**item["request"]),
-                expected=ExpectedResponse(**item["expected"]),
-                metadata=TestCaseMetadata(
-                    owasp_category=item["metadata"].get("owasp_category"),
-                    severity=item["metadata"].get("severity", "medium"),
-                    generated_by="",
-                    generation_prompt_hash="",
-                    tokens_used=0,
-                    request_hash="",
-                ),
-            )
-            test_cases.append(tc)
-        return test_cases
+        return self._parse_test_cases(content, endpoint_id, spec_id, self.CATEGORY, "missing_required")
 
 
 class SecurityGenerator(BaseGenerator):
     CATEGORY = "security"
     SUBCATEGORIES = [
-        "bola", "broken_auth", "bopla", "resource_consumption", "bfla",
-        "business_flow", "ssrf", "misconfiguration", "inventory", "unsafe_consumption"
+        "bola",
+        "broken_auth",
+        "bopla",
+        "resource_consumption",
+        "bfla",
+        "business_flow",
+        "ssrf",
+        "misconfiguration",
+        "inventory",
+        "unsafe_consumption",
     ]
     OWASP_MAPPING = {
         "bola": "API1:2023",
@@ -210,27 +156,4 @@ Output format: {"test_cases": [...]}"""
         return "security.j2"
 
     def parse_response(self, content: str, endpoint_id: str, spec_id: ObjectId) -> list[TestCaseCreate]:
-        data = json.loads(content)
-        test_cases = []
-        for item in data.get("test_cases", []):
-            subcat = item["subcategory"]
-            tc = TestCaseCreate(
-                spec_id=spec_id,
-                endpoint_id=endpoint_id,
-                category=self.CATEGORY,
-                subcategory=subcat,
-                title=item["title"],
-                description=item["description"],
-                request=RequestTemplate(**item["request"]),
-                expected=ExpectedResponse(**item["expected"]),
-                metadata=TestCaseMetadata(
-                    owasp_category=self.OWASP_MAPPING.get(subcat),
-                    severity=item["metadata"].get("severity", "high"),
-                    generated_by="",
-                    generation_prompt_hash="",
-                    tokens_used=0,
-                    request_hash="",
-                ),
-            )
-            test_cases.append(tc)
-        return test_cases
+        return self._parse_test_cases(content, endpoint_id, spec_id, self.CATEGORY, "bola", self.OWASP_MAPPING)

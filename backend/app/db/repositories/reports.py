@@ -42,7 +42,9 @@ class ReportRepository:
         cursor = self.collection.find({"user_id": user_id}).sort("generated_at", -1).skip(skip).limit(limit)
         return [ReportInDB(**doc) async for doc in cursor]
 
-    async def update_file_info(self, report_id: ObjectId, html_path: str | None = None, pdf_path: str | None = None, size: int = 0) -> ReportInDB | None:
+    async def update_file_info(
+        self, report_id: ObjectId, html_path: str | None = None, pdf_path: str | None = None, size: int = 0
+    ) -> ReportInDB | None:
         update = {}
         if html_path:
             update["html_path"] = html_path
@@ -50,9 +52,7 @@ class ReportRepository:
             update["pdf_path"] = pdf_path
         if size:
             update["file_size_bytes"] = size
-        result = await self.collection.find_one_and_update(
-            {"_id": report_id}, {"$set": update}, return_document=True
-        )
+        result = await self.collection.find_one_and_update({"_id": report_id}, {"$set": update}, return_document=True)
         return ReportInDB(**result) if result else None
 
 

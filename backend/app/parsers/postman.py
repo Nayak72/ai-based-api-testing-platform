@@ -20,6 +20,15 @@ async def parse_postman_collection(raw_content: str) -> tuple[dict, list[dict], 
         info = collection.get("info", {})
         name = info.get("name", "Imported Collection")
 
+        # Extract baseUrl from collection variables
+        base_url = "{{baseUrl}}"
+        variables = collection.get("variable", [])
+        if isinstance(variables, list):
+            for var in variables:
+                if var.get("key") == "baseUrl" and var.get("value"):
+                    base_url = var["value"]
+                    break
+
         openapi_spec = {
             "openapi": "3.0.3",
             "info": {
@@ -27,7 +36,7 @@ async def parse_postman_collection(raw_content: str) -> tuple[dict, list[dict], 
                 "version": info.get("version", "1.0.0"),
                 "description": info.get("description", ""),
             },
-            "servers": [{"url": "{{baseUrl}}"}],
+            "servers": [{"url": base_url}],
             "paths": {},
             "components": {"schemas": {}, "securitySchemes": {}},
         }
@@ -35,7 +44,6 @@ async def parse_postman_collection(raw_content: str) -> tuple[dict, list[dict], 
         endpoints = []
         _process_items(collection["item"], openapi_spec, endpoints, "")
 
-        base_url = "{{baseUrl}}"
         version = "3.0.3"
 
         return openapi_spec, endpoints, version, base_url

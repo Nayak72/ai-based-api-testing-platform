@@ -1,0 +1,10 @@
+{
+  "openapi": "3.0.0",
+  "info": {"title": "PokeAPI", "version": "2.0.0"},
+  "servers": [{"url": "https://pokeapi.co/api/v2"}],
+  "paths": {
+    "/pokemon": {"get": {"summary": "List pokemon", "parameters": [{"name": "limit", "in": "query", "schema": {"type": "integer"}}, {"name": "offset", "in": "query", "schema": {"type": "integer"}}], "responses": {"200": {"description": "Pokemon list"}}}},
+    "/pokemon/{name}": {"get": {"summary": "Get pokemon", "parameters": [{"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Pokemon"}, "404": {"description": "Not found"}}}}
+  }
+}
+

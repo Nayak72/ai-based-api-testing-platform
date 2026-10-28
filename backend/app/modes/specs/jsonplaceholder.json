@@ -1,0 +1,26 @@
+{
+  "openapi": "3.0.0",
+  "info": {"title": "JSONPlaceholder", "version": "1.0.0", "description": "Free fake REST API for testing"},
+  "servers": [{"url": "https://jsonplaceholder.typicode.com"}],
+  "paths": {
+    "/posts": {
+      "get": {"summary": "List posts", "parameters": [{"name": "_limit", "in": "query", "schema": {"type": "integer"}}, {"name": "_page", "in": "query", "schema": {"type": "integer"}}], "responses": {"200": {"description": "List of posts"}}},
+      "post": {"summary": "Create post", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"title": {"type": "string"}, "body": {"type": "string"}, "userId": {"type": "integer"}}}}}}, "responses": {"201": {"description": "Created"}}}
+    },
+    "/posts/{id}": {
+      "get": {"summary": "Get post", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Post"}, "404": {"description": "Not found"}}},
+      "put": {"summary": "Update post", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Updated"}}},
+      "delete": {"summary": "Delete post", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Deleted"}}}
+    },
+    "/users": {
+      "get": {"summary": "List users", "responses": {"200": {"description": "List of users"}}}
+    },
+    "/users/{id}": {
+      "get": {"summary": "Get user", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "User"}}}
+    },
+    "/comments": {
+      "get": {"summary": "List comments", "parameters": [{"name": "postId", "in": "query", "schema": {"type": "integer"}}], "responses": {"200": {"description": "Comments"}}}
+    }
+  }
+}
+

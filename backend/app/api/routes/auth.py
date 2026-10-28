@@ -115,7 +115,9 @@ async def refresh(response: Response, request: RefreshRequest):
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not found or inactive")
 
-    await token_blocklist_repository.add(hash_refresh_token(request.refresh_token), user_id, datetime.now(UTC) + timedelta(days=7))
+    await token_blocklist_repository.add(
+        hash_refresh_token(request.refresh_token), user_id, datetime.now(UTC) + timedelta(days=7)
+    )
     await user_repository.remove_refresh_token(user_id, request.refresh_token)
 
     new_access_token = create_access_token(str(user_id))
@@ -154,7 +156,6 @@ async def get_me(current_user: CurrentUser):
         is_superuser=current_user.is_superuser,
         created_at=current_user.created_at,
         last_login=current_user.last_login,
-        ai_settings=getattr(current_user, "ai_settings", {}) or {},
     )
 
 
@@ -171,5 +172,4 @@ async def update_me(current_user: CurrentUser, request: UserUpdateRequest):
         is_superuser=updated.is_superuser,
         created_at=updated.created_at,
         last_login=updated.last_login,
-        ai_settings=getattr(updated, "ai_settings", {}) or {},
     )

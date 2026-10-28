@@ -1,0 +1,15 @@
+{
+  "openapi": "3.0.0",
+  "info": {"title": "httpbin", "version": "1.0.0", "description": "HTTP request/response testing service"},
+  "servers": [{"url": "https://httpbin.org"}],
+  "paths": {
+    "/get": {"get": {"summary": "HTTP GET", "responses": {"200": {"description": "GET response"}}}},
+    "/post": {"post": {"summary": "HTTP POST", "requestBody": {"content": {"application/json": {"schema": {"type": "object"}}}}, "responses": {"200": {"description": "POST response"}}}},
+    "/put": {"put": {"summary": "HTTP PUT", "requestBody": {"content": {"application/json": {"schema": {"type": "object"}}}}, "responses": {"200": {"description": "PUT response"}}}},
+    "/delete": {"delete": {"summary": "HTTP DELETE", "responses": {"200": {"description": "DELETE response"}}}},
+    "/status/{code}": {"get": {"summary": "Return status code", "parameters": [{"name": "code", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"default": {"description": "Status code response"}}}},
+    "/headers": {"get": {"summary": "Return request headers", "responses": {"200": {"description": "Headers"}}}},
+    "/delay/{n}": {"get": {"summary": "Delay response", "parameters": [{"name": "n", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Delayed response"}}}}
+  }
+}
+

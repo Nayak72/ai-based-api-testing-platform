@@ -3,7 +3,7 @@ import asyncio
 import structlog
 from bson import ObjectId
 
-from app.db.models import RequestSent, ResponseReceived, RunConfig, TestCaseInDB, TestResultBase
+from app.db.models import RunConfig, TestCaseInDB
 from app.db.repositories import result_repository, run_repository, test_case_repository
 from app.executor.engine import TestExecutor
 
@@ -58,6 +58,7 @@ class RunOrchestrator:
 
         # Fetch spec to get base_url and auth_config for execution context
         from app.db.repositories import spec_repository
+
         spec = await spec_repository.get_by_id(run.spec_id, user_obj_id)
         if spec:
             # Update run config with spec's base_url and auth_config if not overridden
@@ -69,7 +70,18 @@ class RunOrchestrator:
             await run_repository.update_config(run_obj_id, run.config)
 
         await run_repository.update_status(run_obj_id, "running")
+        await run_repository.update_started_at(run_obj_id)
         run = await run_repository.get_by_id(run_obj_id, user_obj_id)
+
+        # Server-enforce mode limits (cannot be overridden by client)
+        if run.config.mode == "online":
+            run.config.concurrency = min(run.config.concurrency, 3)
+            if not run.config.rate_limit_rps or run.config.rate_limit_rps > 2.0:
+                run.config.rate_limit_rps = 2.0
+            if not run.config.owned_host_attestation:
+                run.config.categories = [
+                    c for c in run.config.categories if c not in ("security", "resource_consumption")
+                ]
 
         context = RunContext(run_obj_id, run.config)
         self.active_runs[run_id] = context
@@ -78,7 +90,7 @@ class RunOrchestrator:
             max_concurrent_requests=run.config.concurrency,
             request_timeout=run.config.timeout_seconds,
             max_retries=run.config.retry_failed,
-            rate_limit_rps=None,
+            rate_limit_rps=run.config.rate_limit_rps,
         )
 
         try:
@@ -99,64 +111,58 @@ class RunOrchestrator:
                 context.add_task(str(tc.id), task)
                 tasks.append(task)
 
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            passed = failed = errors = skipped = blocked = 0
 
-            passed = failed = errors = skipped = 0
-            result_docs = []
+            for task in asyncio.as_completed(tasks):
+                if context.is_cancelled():
+                    break
+                try:
+                    result = await task
+                    context.remove_task(str(result.test_case_id))
 
-            for i, result in enumerate(results):
-                tc = filtered_cases[i]
-                context.remove_task(str(tc.id))
+                    # Persist each result immediately
+                    await result_repository.create(result)
 
-                if isinstance(result, Exception):
-                    logger.error("Test execution exception", test_case_id=str(tc.id), error=str(result))
-                    errors += 1
-                    result_doc = TestResultBase(
-                        run_id=run_obj_id,
-                        test_case_id=tc.id,
-                        endpoint_id=tc.endpoint_id,
-                        category=tc.category,
-                        status="error",
-                        request_sent=RequestSent(
-                            method=tc.request.method,
-                            url=tc.request.path,
-                            headers=tc.request.headers,
-                            body=tc.request.body,
-                        ),
-                        response=ResponseReceived(
-                            status_code=0,
-                            headers={},
-                            body=None,
-                            duration_ms=0,
-                        ),
-                        error=str(result),
-                    )
-                else:
-                    result_doc = result
+                    # Update summary counters atomically
                     if result.status == "passed":
                         passed += 1
+                        await run_repository.increment_summary(run_obj_id, "passed", 1)
                     elif result.status == "failed":
                         failed += 1
+                        await run_repository.increment_summary(run_obj_id, "failed", 1)
                     elif result.status == "error":
                         errors += 1
+                        await run_repository.increment_summary(run_obj_id, "errors", 1)
                     elif result.status == "skipped":
                         skipped += 1
+                        await run_repository.increment_summary(run_obj_id, "skipped", 1)
+                    elif result.status == "blocked":
+                        blocked += 1
+                        await run_repository.increment_summary(run_obj_id, "blocked", 1)
 
-                result_docs.append(result_doc)
+                except Exception as e:
+                    logger.error("Test execution exception", error=str(e))
+                    errors += 1
+                    await run_repository.increment_summary(run_obj_id, "errors", 1)
 
-            if result_docs:
-                await result_repository.bulk_create(result_docs)
+            total = passed + failed + errors + skipped + blocked
+            await run_repository.increment_summary(run_obj_id, "total", total)
 
-            await run_repository.increment_summary(run_obj_id, "total", len(filtered_cases))
-            await run_repository.increment_summary(run_obj_id, "passed", passed)
-            await run_repository.increment_summary(run_obj_id, "failed", failed)
-            await run_repository.increment_summary(run_obj_id, "errors", errors)
-            await run_repository.increment_summary(run_obj_id, "skipped", skipped)
-
-            final_status = "cancelled" if context.is_cancelled() else ("completed" if errors == 0 else "completed")
+            final_status = (
+                "cancelled" if context.is_cancelled() else ("completed_with_errors" if errors > 0 else "completed")
+            )
             await run_repository.update_status(run_obj_id, final_status)
+            await run_repository.update_completed_at(run_obj_id)
 
-            logger.info("Run completed", run_id=run_id, passed=passed, failed=failed, errors=errors, skipped=skipped)
+            logger.info(
+                "Run completed",
+                run_id=run_id,
+                passed=passed,
+                failed=failed,
+                errors=errors,
+                skipped=skipped,
+                blocked=blocked,
+            )
 
         except Exception as e:
             logger.exception("Run execution failed", run_id=run_id, error=str(e))
@@ -217,19 +223,16 @@ class RunOrchestrator:
                 context.add_task(str(tc.id), task)
                 tasks.append(task)
 
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for task in asyncio.as_completed(tasks):
+                try:
+                    result = await task
+                    existing_res = next(r for r in all_failed if r.test_case_id == result.test_case_id)
 
-            for i, result in enumerate(results):
-                tc = test_cases[i]
-                context.remove_task(str(tc.id))
-                existing_res = all_failed[i]
-
-                if isinstance(result, Exception):
-                    continue
-
-                await result_repository.update_status(existing_res.id, result.status)
-                if result.llm_analysis:
-                    await result_repository.update_analysis(existing_res.id, result.llm_analysis.model_dump())
+                    await result_repository.update_status(existing_res.id, result.status)
+                    if result.llm_analysis:
+                        await result_repository.update_analysis(existing_res.id, result.llm_analysis.model_dump())
+                except Exception as e:
+                    logger.error("Retry execution exception", error=str(e))
 
             await run_repository.update_status(run_id, "completed")
 

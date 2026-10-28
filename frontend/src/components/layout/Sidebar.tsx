@@ -1,11 +1,26 @@
 import { Link, useLocation, NavLink } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { User, SignOut, SquaresFour, Database, PlayCircle, FileText, Gear, CaretLeft } from '@phosphor-icons/react'
+import {
+  User,
+  SignOut,
+  SquaresFour,
+  Database,
+  PlayCircle,
+  FileText,
+  Gear,
+  CaretLeft,
+  RocketLaunch,
+  PaperPlaneRight,
+  Books,
+} from '@phosphor-icons/react'
 import { clsx } from 'clsx'
 import { Button } from '../ui/Button'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: SquaresFour },
+  { name: 'New Session', href: '/sessions/new', icon: RocketLaunch },
+  { name: 'Quick Test', href: '/quick-test', icon: PaperPlaneRight },
+  { name: 'Knowledge Base', href: '/knowledge-base', icon: Books },
   { name: 'Specifications', href: '/specs', icon: Database },
   { name: 'Test Runs', href: '/runs', icon: PlayCircle },
   { name: 'Reports', href: '/reports', icon: FileText },

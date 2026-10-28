@@ -1,4 +1,3 @@
-
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
 
@@ -80,7 +79,9 @@ class TestCaseRepository:
         cursor = self.collection.find(query).sort("created_at", 1).skip(skip).limit(limit)
         return [TestCaseInDB(**doc) async for doc in cursor]
 
-    async def count_by_spec(self, spec_id: ObjectId, endpoint_id: str | None = None, category: str | None = None) -> int:
+    async def count_by_spec(
+        self, spec_id: ObjectId, endpoint_id: str | None = None, category: str | None = None
+    ) -> int:
         query = {"spec_id": spec_id}
         if endpoint_id:
             query["endpoint_id"] = endpoint_id

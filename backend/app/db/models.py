@@ -1,5 +1,6 @@
 from datetime import datetime
-from typing import Annotated, Any
+from enum import StrEnum
+from typing import Annotated, Any, Literal
 
 from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, GetJsonSchemaHandler
@@ -25,12 +26,8 @@ class _ObjectIdPydanticAnnotation:
 
         return core_schema.json_or_python_schema(
             json_schema=core_schema.str_schema(),
-            python_schema=core_schema.with_info_plain_validator_function(
-                lambda v, _: validate_from_str(v)
-            ),
-            serialization=core_schema.plain_serializer_function_ser_schema(
-                lambda x: str(x)
-            ),
+            python_schema=core_schema.with_info_plain_validator_function(lambda v, _: validate_from_str(v)),
+            serialization=core_schema.plain_serializer_function_ser_schema(lambda x: str(x)),
         )
 
     @classmethod
@@ -46,7 +43,6 @@ PyObjectId = Annotated[ObjectId, _ObjectIdPydanticAnnotation]
 class UserBase(BaseModel):
     email: str
     full_name: str | None = None
-    ai_settings: dict[str, Any] = Field(default_factory=dict)
 
 
 class UserCreate(UserBase):
@@ -56,7 +52,6 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     full_name: str | None = None
     password: str | None = None
-    ai_settings: dict[str, Any] | None = None
 
 
 class UserInDB(UserBase):
@@ -82,9 +77,62 @@ class TokenBlocklist(BaseModel):
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
 
 
+class ProviderPreset(StrEnum):
+    OPENROUTER = "openrouter"
+    NIM = "nim"
+    OPENAI_COMPATIBLE = "openai_compatible"
+    OLLAMA = "ollama"
+    LMSTUDIO = "lmstudio"
+    LLAMACPP = "llamacpp"
+
+
+class ModelCapabilities(BaseModel):
+    json_mode: bool = True
+    json_schema: bool = False
+    tools: bool = False
+    context_window: int = 8192
+    is_local: bool = False
+
+
+class ProviderProfileBase(BaseModel):
+    name: str
+    preset: ProviderPreset
+    base_url: str
+    model: str
+    embedding_model: str | None = None
+    api_key_encrypted: str | None = None
+    capabilities: ModelCapabilities = Field(default_factory=ModelCapabilities)
+    is_default: bool = False
+
+
+class ProviderProfileCreate(ProviderProfileBase):
+    api_key: str | None = None
+
+
+class ProviderProfileUpdate(BaseModel):
+    name: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    embedding_model: str | None = None
+    api_key: str | None = None
+    capabilities: ModelCapabilities | None = None
+    is_default: bool | None = None
+
+
+class ProviderProfileInDB(ProviderProfileBase):
+    id: PyObjectId = Field(alias="_id")
+    user_id: PyObjectId
+    has_key: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
+    updated_at: datetime = Field(default_factory=lambda: datetime.now())
+
+    model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
+
+
 class AuthConfig(BaseModel):
     type: str = "bearer"
     token_env_var: str | None = None
+    token: str | None = None  # direct token (never stored in plaintext in DB)
 
 
 class APISpecBase(BaseModel):
@@ -151,6 +199,8 @@ class RequestTemplate(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     query_params: dict[str, Any] = Field(default_factory=dict)
     body: Any | None = None
+    raw_body: str | None = None
+    content_type: str | None = None
 
 
 class TestCaseMetadata(BaseModel):
@@ -161,6 +211,11 @@ class TestCaseMetadata(BaseModel):
     generation_prompt_hash: str
     tokens_used: int
     request_hash: str
+    rag_sources: list[dict] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    extract: list[dict] = Field(default_factory=list)
+    agent: str | None = None
+    repairs_used: int = 0
 
 
 class TestCaseBase(BaseModel):
@@ -196,8 +251,16 @@ class RunConfig(BaseModel):
     categories: list[str] = Field(default_factory=lambda: ["functional", "edge", "malformed", "security"])
     base_url_override: str | None = None
     auth_override: AuthConfig | None = None
+    auth_secondary: AuthConfig | None = None  # second identity for BOLA/BFLA
     spec_base_url: str | None = None
     spec_auth_config: AuthConfig | None = None
+    rate_limit_rps: float | None = None
+    # Phase 1 additions
+    mode: Literal["local", "online"] = "local"
+    intensity: Literal["safe", "standard", "aggressive"] = "standard"
+    max_total_requests: int = 500
+    owned_host_attestation: bool = False
+    routing: dict | None = None  # LLMRouter config
 
 
 class RunSummary(BaseModel):
@@ -206,6 +269,7 @@ class RunSummary(BaseModel):
     failed: int = 0
     errors: int = 0
     skipped: int = 0
+    blocked: int = 0
     duration_seconds: float = 0.0
 
 
@@ -262,6 +326,10 @@ class LLMAnalysis(BaseModel):
     findings: list[dict] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     false_positive_likelihood: float = 0.1
+    # Phase 4 additions
+    verdict: str | None = None  # "real_bug", "test_bug", "spec_drift", "flaky", "environment", "ok"
+    owasp_category: str | None = None
+    rag_sources: list[dict] = Field(default_factory=list)
 
 
 class TestResultBase(BaseModel):

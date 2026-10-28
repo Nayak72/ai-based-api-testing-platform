@@ -4,7 +4,18 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, reports, runs, specs, test_cases
+from app.api.routes import (
+    auth,
+    catalog,
+    kb,
+    providers,
+    quick_test,
+    reports,
+    runs,
+    sessions,
+    specs,
+    test_cases,
+)
 from app.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
@@ -50,6 +61,11 @@ def create_app() -> FastAPI:
     app.include_router(test_cases.router, prefix="/api/v1/specs", tags=["test-cases"])
     app.include_router(runs.router, prefix="/api/v1/runs", tags=["runs"])
     app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
+    app.include_router(providers.router, prefix="/api/v1/providers", tags=["providers"])
+    app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["catalog"])
+    app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["sessions"])
+    app.include_router(kb.router, prefix="/api/v1/kb", tags=["knowledge-base"])
+    app.include_router(quick_test.router, prefix="/api/v1/quick-test", tags=["quick-test"])
 
     @app.get("/health")
     async def health_check():

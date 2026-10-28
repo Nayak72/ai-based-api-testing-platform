@@ -49,8 +49,6 @@ class UserRepository:
             update_data["full_name"] = update.full_name
         if update.password is not None:
             update_data["password_hash"] = hash_password(update.password)
-        if update.ai_settings is not None:
-            update_data["ai_settings"] = update.ai_settings
 
         result = await self.collection.find_one_and_update(
             {"_id": user_id},

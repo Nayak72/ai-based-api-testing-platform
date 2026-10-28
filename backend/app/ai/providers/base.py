@@ -10,6 +10,10 @@ logger = structlog.get_logger()
 class ProviderName(StrEnum):
     OPENROUTER = "openrouter"
     NVIDIA_NIM = "nim"
+    OLLAMA = "ollama"
+    LMSTUDIO = "lmstudio"
+    LLAMACPP = "llamacpp"
+    OPENAI_COMPATIBLE = "openai_compatible"
 
 
 @dataclass
@@ -90,7 +94,7 @@ class AIProvider(ABC):
                 last_error = e
                 if e.code in ("rate_limit", "server_error", "timeout"):
                     if attempt < max_retries:
-                        delay = base_delay * (2 ** attempt) + random.uniform(0, 0.5)
+                        delay = base_delay * (2**attempt) + random.uniform(0, 0.5)
                         if e.retry_after:
                             delay = max(delay, e.retry_after)
                         logger.warning(

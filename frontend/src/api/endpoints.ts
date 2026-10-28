@@ -178,6 +178,7 @@ export const specsApi = {
   parse: (specId: string) => api.post<Spec>(`/specs/${specId}/parse`),
   endpoints: (specId: string) => api.get<{ spec_id: string; endpoints: Endpoint[]; total: number }>(`/specs/${specId}/endpoints`),
   delete: (specId: string) => api.delete(`/specs/${specId}`),
+  importFromUrl: (data: { url: string; name?: string; mode?: string }) => api.post<Spec>('/specs/from-url', data),
 }
 
 // Test Cases
@@ -219,4 +220,158 @@ export const reportsApi = {
   get: (reportId: string) => api.get<Report>(`/reports/${reportId}`),
   download: (reportId: string, format: 'html' | 'pdf') => api.get(`/reports/${reportId}/download`, { params: { format }, responseType: 'blob' }),
   getByRun: (runId: string) => api.get<Report>(`/reports/runs/${runId}`),
+}
+
+// Provider Profiles
+export interface ProviderProfile {
+  id: string
+  name: string
+  provider_type: 'openrouter' | 'nim' | 'ollama' | 'lmstudio' | 'llamacpp' | 'openai_compatible'
+  base_url: string
+  default_model: string
+  has_key: boolean
+  is_active: boolean
+  created_at: string
+}
+
+export const providersApi = {
+  list: () => api.get<ProviderProfile[]>('/providers'),
+  create: (data: { name: string; provider_type: string; base_url: string; default_model: string; api_key?: string }) =>
+    api.post<ProviderProfile>('/providers', data),
+  update: (id: string, data: Partial<{ name: string; base_url: string; default_model: string; api_key?: string; is_active: boolean }>) =>
+    api.patch<ProviderProfile>(`/providers/${id}`, data),
+  delete: (id: string) => api.delete(`/providers/${id}`),
+  test: (id: string) => api.post<{ ok: boolean; message: string; latency_ms?: number }>(`/providers/${id}/test`),
+  presets: () => api.get<Record<string, any>>('/providers/presets'),
+  ollamaModels: (baseUrl?: string) => api.get<{ models: string[] }>('/providers/ollama/models', { params: { base_url: baseUrl } }),
+}
+
+// Catalog
+export interface CatalogItem {
+  id: string
+  name: string
+  description: string
+  base_url: string
+  bundled_spec_path?: string
+  auth_type: string
+  categories: string[]
+  tags: string[]
+}
+
+export const catalogApi = {
+  list: () => api.get<{ catalog: CatalogItem[] }>('/catalog'),
+  import: (catalogId: string, options?: { mode?: string; name?: string }) =>
+    api.post<{ spec_id: string; status: string; message: string }>(`/catalog/${catalogId}/import`, options || {}),
+}
+
+// Sessions & Agent Events
+export interface Session {
+  id: string
+  spec_id: string
+  user_id: string
+  name: string
+  status: 'pending' | 'waiting_approval' | 'running' | 'completed' | 'failed' | 'cancelled'
+  mode: 'local' | 'online'
+  base_url?: string
+  auth_type?: string
+  provider_profile_id?: string
+  categories?: string[]
+  intensity: string
+  agentic: boolean
+  waiting_human?: boolean
+  plan?: {
+    endpoints: Array<{
+      endpoint_id: string
+      method: string
+      path: string
+      categories: string[]
+      priority: string
+      needs_auth: boolean
+    }>
+  }
+  run_id?: string
+  error?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AgentEvent {
+  session_id: string
+  agent: string
+  step: string
+  status: 'started' | 'progress' | 'completed' | 'failed' | 'waiting_human'
+  message: string
+  ts: string
+  data?: any
+  tokens?: number
+  latency_ms?: number
+  provider?: string
+  model?: string
+  rag_used?: boolean
+  rag_sources?: any[]
+  repairs_used?: number
+}
+
+export const sessionsApi = {
+  create: (data: {
+    spec_id: string
+    name: string
+    mode?: string
+    base_url?: string
+    auth_type?: string
+    auth_token?: string
+    provider_profile_id?: string
+    categories?: string[]
+    intensity?: string
+    agentic?: boolean
+  }) => api.post<{ session_id: string; id: string; status: string }>('/sessions', data),
+  list: (params?: { page?: number; page_size?: number }) =>
+    api.get<{ sessions: Session[]; total: number; page: number; page_size: number }>('/sessions', { params }),
+  get: (sessionId: string) => api.get<Session>(`/sessions/${sessionId}`),
+  approvePlan: (sessionId: string, approved: boolean, modified_plan?: any[]) =>
+    api.post(`/sessions/${sessionId}/approve-plan`, { approved, modified_plan }),
+  provideAuth: (sessionId: string, token: string) =>
+    api.post(`/sessions/${sessionId}/provide-auth`, { token }),
+  cancel: (sessionId: string) => api.post(`/sessions/${sessionId}/cancel`),
+}
+
+// Knowledge Base
+export interface KBStatus {
+  owasp_count: number
+  http_kb_count: number
+  spec_chunks_count: number
+  total: number
+}
+
+export const kbApi = {
+  status: () => api.get<KBStatus>('/kb/status'),
+  reindex: () => api.post<{ status: string }>('/kb/reindex'),
+  search: (q: string, specId?: string, limit?: number) =>
+    api.get<{ results: any[]; query: string }>('/kb/search', { params: { q, spec_id: specId, limit } }),
+}
+
+// Quick Test
+export interface QuickTestRequest {
+  url: string
+  method: string
+  headers?: Record<string, string>
+  query_params?: Record<string, string>
+  body?: any
+  auth_type?: string
+  auth_token?: string
+  mode?: string
+  timeout_seconds?: number
+}
+
+export interface QuickTestResponse {
+  status_code: number
+  headers: Record<string, string>
+  body: any
+  body_truncated: boolean
+  duration_ms: number
+  error?: string | null
+}
+
+export const quickTestApi = {
+  test: (data: QuickTestRequest) => api.post<QuickTestResponse>('/quick-test', data),
 }

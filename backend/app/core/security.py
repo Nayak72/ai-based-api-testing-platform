@@ -58,3 +58,33 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def hash_refresh_token(token: str) -> str:
     return f"sha256:{hashlib.sha256(token.encode()).hexdigest()}"
+
+
+def decode_access_token(token: str) -> dict:
+    """Decode and validate a JWT access token, returning the payload."""
+    settings = get_settings()
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+        return payload
+    except JWTError as e:
+        raise ValueError(f"Invalid token: {e}") from e
+
+
+def encrypt_value(value: str) -> str:
+    """Encrypt a value using safety.secrets, falling back to plaintext if no key configured."""
+    try:
+        from app.safety.secrets import encrypt_secret
+
+        return encrypt_secret(value)
+    except Exception:
+        return value
+
+
+def decrypt_value(ciphertext: str) -> str:
+    """Decrypt a value using safety.secrets, falling back to ciphertext if no key configured."""
+    try:
+        from app.safety.secrets import decrypt_secret
+
+        return decrypt_secret(ciphertext)
+    except Exception:
+        return ciphertext
