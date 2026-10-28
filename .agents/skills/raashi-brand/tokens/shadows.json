@@ -1,8 +1,0 @@
-{
-  "shadows": {
-    "soft": "0 4px 20px -2px rgba(23, 40, 94, 0.06)",
-    "softHover": "0 10px 30px -4px rgba(23, 40, 94, 0.12)",
-    "floating": "0 20px 40px -8px rgba(23, 40, 94, 0.16)",
-    "focusRing": "0 0 0 2px #FFFFFF, 0 0 0 4px #0560DF"
-  }
-}
