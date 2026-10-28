@@ -203,3 +203,34 @@ def test_openrouter_model_from_env_and_settings():
     # make_openrouter_provider defaults to settings model
     preset = make_openrouter_provider()
     assert preset.default_model == settings.openrouter_default_model
+
+    from app.ai.providers.nim import NIMProvider
+    from app.ai.providers.openai_compat import make_nim_provider
+    nim_provider = NIMProvider()
+    assert nim_provider.default_model == settings.nim_default_model
+    nim_preset = make_nim_provider()
+    assert nim_preset.default_model == settings.nim_default_model
+
+
+def test_spec_models_default_status():
+    from datetime import datetime
+    from app.db.models import APISpecInDB
+    from app.api.schemas.specs import SpecResponse
+
+    spec = APISpecInDB(
+        _id=ObjectId(),
+        user_id=ObjectId(),
+        name="test_spec",
+    )
+    assert spec.status == "pending"
+
+    resp = SpecResponse(
+        id=str(ObjectId()),
+        name="test_spec",
+        source_type="openapi",
+        source_format="json",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    assert resp.status == "pending"
+

@@ -50,6 +50,8 @@ export function StatusBadge({ status }: { status: string }) {
     pending: 'info',
     running: 'info',
     completed: 'success',
+    completed_with_errors: 'warning',
+    waiting_approval: 'warning',
     cancelled: 'gray',
     cancelling: 'warning',
   }
@@ -62,6 +64,8 @@ export function StatusBadge({ status }: { status: string }) {
     pending: 'Pending',
     running: 'Running',
     completed: 'Completed',
+    completed_with_errors: 'Completed with errors',
+    waiting_approval: 'Awaiting approval',
     cancelled: 'Cancelled',
     cancelling: 'Cancelling',
   }

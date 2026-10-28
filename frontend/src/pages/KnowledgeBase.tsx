@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Card, Button, Input } from '../components/ui'
+import { Card, Button, Input, ErrorState, Skeleton } from '../components/ui'
 import { kbApi, KBStatus } from '../api/endpoints'
 import {
   Books,
@@ -27,17 +27,21 @@ const OWASP_TOP10 = [
 export function KnowledgeBase() {
   const [status, setStatus] = useState<KBStatus | null>(null)
   const [loading, setLoading] = useState(true)
+  const [statusError, setStatusError] = useState<string | null>(null)
   const [reindexing, setReindexing] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searching, setSearching] = useState(false)
-  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [hasSearched, setHasSearched] = useState(false)
+  const [searchResults, setSearchResults] = useState<Array<{ text?: string; document?: string; score?: number; metadata?: { category?: string; kind?: string } }>>([])
+  const [searchError, setSearchError] = useState<string | null>(null)
 
   const fetchStatus = async () => {
     try {
       const res = await kbApi.status()
       setStatus(res.data)
+      setStatusError(null)
     } catch {
-      toast.error('Failed to load KB status')
+      setStatusError('The knowledge-base service did not return its index status. Counts are unavailable until it can be reached.')
     } finally {
       setLoading(false)
     }
@@ -67,6 +71,8 @@ export function KnowledgeBase() {
     if (!searchQuery.trim()) return
 
     setSearching(true)
+    setHasSearched(true)
+    setSearchError(null)
     try {
       const res = await kbApi.search(searchQuery.trim(), undefined, 6)
       setSearchResults(res.data.results || [])
@@ -74,14 +80,15 @@ export function KnowledgeBase() {
         toast('No matching vector chunks found', { icon: 'ℹ️' })
       }
     } catch {
-      toast.error('Search failed')
+      setSearchResults([])
+      setSearchError('Search could not be completed. Check the knowledge-base service and try again.')
     } finally {
       setSearching(false)
     }
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="mx-auto max-w-6xl space-y-6 page-enter">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -106,31 +113,32 @@ export function KnowledgeBase() {
         </Button>
       </div>
 
-      {/* Metric Cards */}
+      {statusError && <ErrorState title="Knowledge-base status is unavailable" description={statusError} onRetry={() => void fetchStatus()} />}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="p-4">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Total Indexed Chunks</p>
-          <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mt-1">
-            {loading ? '-' : status?.total || 0}
-          </p>
+          <div className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            {loading ? <Skeleton className="h-7 w-10" /> : status?.total ?? '—'}
+          </div>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">OWASP Top 10 Chunks</p>
-          <p className="text-2xl font-bold text-brand-600 mt-1">
-            {loading ? '-' : status?.owasp_count || 10}
-          </p>
+          <div className="mt-1 text-2xl font-bold text-brand-600">
+            {loading ? <Skeleton className="h-7 w-10" /> : status?.owasp_count ?? '—'}
+          </div>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">HTTP Standards Chunks</p>
-          <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mt-1">
-            {loading ? '-' : status?.http_kb_count || 3}
-          </p>
+          <div className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            {loading ? <Skeleton className="h-7 w-10" /> : status?.http_kb_count ?? '—'}
+          </div>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Spec Endpoints & Schemas</p>
-          <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mt-1">
-            {loading ? '-' : status?.spec_chunks_count || 0}
-          </p>
+          <div className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            {loading ? <Skeleton className="h-7 w-10" /> : status?.spec_chunks_count ?? '—'}
+          </div>
         </Card>
       </div>
 
@@ -183,6 +191,10 @@ export function KnowledgeBase() {
               ))}
             </div>
           </div>
+        )}
+        {searchError && <p className="mt-4 rounded-12 bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300" role="alert">{searchError}</p>}
+        {!searching && !searchError && hasSearched && searchResults.length === 0 && (
+          <p className="mt-4 rounded-12 bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-900/60 dark:text-slate-300">No matching knowledge-base chunks were found. Try a broader question or different terminology.</p>
         )}
       </Card>
 

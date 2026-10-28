@@ -39,9 +39,7 @@ class AIOrchestrator:
                         error_code=e.code,
                         message=e.message,
                     )
-                    if e.code in ("rate_limit", "server_error", "timeout") or e.code == "auth_error":
-                        break
-                    raise
+                    break
         raise ProviderError(
             provider=ProviderName.OPENROUTER,
             code="all_providers_failed",
@@ -72,12 +70,12 @@ def create_orchestrator(
         fallback_name = "nim" if primary_name == "openrouter" else "openrouter"
 
     openrouter_provider = OpenRouterProvider(
-        api_key=api_key if primary_name == "openrouter" else None,
-        default_model=model if primary_name == "openrouter" else None,
+        api_key=api_key if (primary_name == "openrouter" and api_key) else settings.openrouter_api_key,
+        default_model=model if (primary_name == "openrouter" and model) else settings.openrouter_default_model,
     )
     nim_provider = NIMProvider(
-        api_key=api_key if primary_name == "nim" else None,
-        default_model=model if primary_name == "nim" else None,
+        api_key=api_key if (primary_name == "nim" and api_key) else settings.nim_api_key,
+        default_model=model if (primary_name == "nim" and model) else settings.nim_default_model,
     )
 
     providers = {

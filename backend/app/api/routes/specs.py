@@ -169,8 +169,8 @@ async def parse_spec(spec_id: str, user_id: CurrentUserId):
     if not spec:
         raise HTTPException(status_code=404, detail="Spec not found")
 
-    if spec.status == "parsing":
-        raise HTTPException(status_code=409, detail="Spec is already being parsed")
+    if not spec.raw_content:
+        raise HTTPException(status_code=400, detail="Spec has no content to parse")
 
     await spec_repository.update_status(obj_id, "parsing")
 

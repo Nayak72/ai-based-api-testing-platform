@@ -5,7 +5,10 @@ from cryptography.fernet import Fernet
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_env_file = Path(__file__).resolve().parents[2] / ".env"
+# The API is run from ``backend/`` during local development, and its
+# deployment-specific settings live beside that service. Environment variables
+# still take precedence, so containers and hosted deployments can override it.
+_env_file = Path(__file__).resolve().parents[1] / ".env"
 
 
 class Settings(BaseSettings):
@@ -52,14 +55,14 @@ class Settings(BaseSettings):
     # OpenRouter
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_default_model: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
+    openrouter_default_model: str = ""
     openrouter_site_url: str = "http://localhost:8000"
     openrouter_site_name: str = "API Testing Platform"
 
     # NVIDIA NIM
     nim_api_key: str | None = None
     nim_base_url: str = "https://integrate.api.nvidia.com/v1"
-    nim_default_model: str = "meta/llama-3.1-70b-instruct"
+    nim_default_model: str = ""
 
     # AI Orchestrator
     ai_primary_provider: str = "openrouter"
@@ -98,7 +101,7 @@ class Settings(BaseSettings):
     # Agentic Mode
     agentic_mode: bool = False
     local_llm_base_url: str = "http://localhost:11434/v1"
-    local_llm_model: str = "llama3"
+    local_llm_model: str = ""
 
     # Target Safety
     owned_host_allowlist: str | list[str] = []

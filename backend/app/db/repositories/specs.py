@@ -31,7 +31,7 @@ class SpecRepository:
             "endpoints_count": 0,
             "spec_version": None,
             "base_url": None,
-            "status": "parsing",
+            "status": "pending",
             "parse_error": None,
             "created_at": now,
             "updated_at": now,
@@ -139,39 +139,70 @@ class GenerationCacheRepository:
     async def get(
         self, spec_id: ObjectId, endpoint_id: str, category: str, prompt_version: str, model: str | None = None
     ) -> GenerationCache | None:
-        query = {"spec_id": spec_id, "endpoint_id": endpoint_id, "category": category, "prompt_version": prompt_version}
+        spec_ids = [spec_id, str(spec_id)]
+        if ObjectId.is_valid(str(spec_id)):
+            spec_ids.append(ObjectId(str(spec_id)))
+        query = {
+            "spec_id": {"$in": spec_ids},
+            "endpoint_id": endpoint_id,
+            "category": category,
+            "prompt_version": prompt_version,
+        }
         if model:
             query["model"] = model
         doc = await self.collection.find_one(query)
         return GenerationCache(**doc) if doc else None
 
     async def set(self, cache: GenerationCache) -> None:
-        query = {
-            "spec_id": cache.spec_id,
+        spec_ids = [cache.spec_id, str(cache.spec_id)]
+        if ObjectId.is_valid(str(cache.spec_id)):
+            spec_ids.append(ObjectId(str(cache.spec_id)))
+
+        doc = cache.model_dump(by_alias=True)
+        doc.pop("_id", None)
+        doc["spec_id"] = cache.spec_id
+
+        existing = await self.collection.find_one({
+            "spec_id": {"$in": spec_ids},
             "endpoint_id": cache.endpoint_id,
             "category": cache.category,
             "prompt_version": cache.prompt_version,
-        }
-        if cache.model:
-            query["model"] = cache.model
+        })
 
-        doc = cache.model_dump(by_alias=True)
-        if not doc.get("_id"):
-            doc["_id"] = ObjectId()
+        if existing:
+            await self.collection.update_one(
+                {"_id": existing["_id"]},
+                {"$set": doc},
+            )
+            return
 
         try:
-            await self.collection.replace_one(
-                query,
-                doc,
+            await self.collection.update_one(
+                {
+                    "spec_id": cache.spec_id,
+                    "endpoint_id": cache.endpoint_id,
+                    "category": cache.category,
+                    "prompt_version": cache.prompt_version,
+                },
+                {"$set": doc},
                 upsert=True,
             )
         except Exception as e:
-            if "duplicate key error" in str(e) and ("_id: null" in str(e) or "_id" in str(e)):
-                await self.collection.delete_many({"_id": None})
-                doc["_id"] = doc.get("_id") or ObjectId()
-                await self.collection.replace_one(
-                    query,
-                    doc,
+            if "duplicate key error" in str(e):
+                await self.collection.delete_many({
+                    "spec_id": {"$in": spec_ids},
+                    "endpoint_id": cache.endpoint_id,
+                    "category": cache.category,
+                    "prompt_version": cache.prompt_version,
+                })
+                await self.collection.update_one(
+                    {
+                        "spec_id": cache.spec_id,
+                        "endpoint_id": cache.endpoint_id,
+                        "category": cache.category,
+                        "prompt_version": cache.prompt_version,
+                    },
+                    {"$set": doc},
                     upsert=True,
                 )
             else:

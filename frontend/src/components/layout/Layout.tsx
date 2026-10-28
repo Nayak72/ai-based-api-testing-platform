@@ -13,7 +13,7 @@ export function Layout({ children }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+    <div className="min-h-screen overflow-x-hidden">
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -22,7 +22,7 @@ export function Layout({ children }: LayoutProps) {
       />
       <div className={clsx('flex flex-col min-h-screen transition-all duration-300', collapsed ? 'lg:pl-20' : 'lg:pl-64')}>
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 p-4 lg:p-6">
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           {children || <Outlet />}
         </main>
       </div>

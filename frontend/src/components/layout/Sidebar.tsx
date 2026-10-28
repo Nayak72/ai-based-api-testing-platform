@@ -49,13 +49,13 @@ export function Sidebar({ isOpen, onClose, collapsed = false, onToggleCollapse }
       />
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-40 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 transition-all duration-300 flex flex-col h-full',
+          'glass-surface fixed inset-y-0 left-0 z-40 flex h-full flex-col border-y-0 border-l-0 transition-all duration-300',
           collapsed ? 'w-20' : 'w-64',
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
         aria-label="Main navigation"
       >
-        <div className="flex items-center justify-between h-16 px-4 border-b border-zinc-200 dark:border-zinc-800 flex-shrink-0">
+        <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-slate-200/70 px-4 dark:border-slate-700/70">
           {!collapsed && (
             <Link to="/" className="flex items-center gap-2" aria-label="API Testing Platform">
               <div className="w-8 h-8 rounded-12 bg-brand-600 flex items-center justify-center flex-shrink-0">
@@ -67,7 +67,7 @@ export function Sidebar({ isOpen, onClose, collapsed = false, onToggleCollapse }
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
-              className={clsx('p-1.5 rounded-8 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors', collapsed && 'mx-auto')}
+              className={clsx('rounded-10 p-1.5 text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white', collapsed && 'mx-auto')}
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               aria-expanded={!collapsed}
             >
@@ -100,7 +100,7 @@ export function Sidebar({ isOpen, onClose, collapsed = false, onToggleCollapse }
           })}
         </nav>
 
-        <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 flex-shrink-0">
+        <div className="flex-shrink-0 border-t border-slate-200/70 p-3 dark:border-slate-700/70">
           {!collapsed ? (
             <div className="space-y-2">
               <div className="flex items-center gap-3 px-2 py-1.5">
@@ -127,13 +127,15 @@ export function Sidebar({ isOpen, onClose, collapsed = false, onToggleCollapse }
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              <button
+              <Link
+                to="/settings"
+                aria-label="Settings"
                 className="sidebar-link justify-center px-2"
                 title="Profile"
                 onClick={onClose}
               >
                 <User className="h-5 w-5" />
-              </button>
+              </Link>
               <button
                 className="sidebar-link justify-center px-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                 title="Logout"

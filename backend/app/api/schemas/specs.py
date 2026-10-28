@@ -27,7 +27,7 @@ class SpecResponse(BaseModel):
     endpoints_count: int = 0
     spec_version: str | None = None
     base_url: str | None = None
-    status: str = "parsing"
+    status: str = "pending"
     parse_error: str | None = None
     created_at: datetime
     updated_at: datetime

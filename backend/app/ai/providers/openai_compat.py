@@ -205,42 +205,51 @@ def make_nim_provider(
 
 
 def make_ollama_provider(
-    base_url: str = "http://localhost:11434/v1",
-    model: str = "llama3",
+    base_url: str | None = None,
+    model: str | None = None,
 ) -> OpenAICompatProvider:
+    from app.config import get_settings
+
+    settings = get_settings()
     return OpenAICompatProvider(
         name="ollama",
-        base_url=base_url,
+        base_url=base_url or settings.local_llm_base_url,
         api_key=None,
-        default_model=model,
+        default_model=model or settings.local_llm_model,
         capabilities=ModelCapabilities(json_mode=True, tools=False, context_window=8192, is_local=True),
         timeout=180.0,
     )
 
 
 def make_lmstudio_provider(
-    base_url: str = "http://localhost:1234/v1",
-    model: str = "local-model",
+    base_url: str | None = None,
+    model: str | None = None,
 ) -> OpenAICompatProvider:
+    from app.config import get_settings
+
+    settings = get_settings()
     return OpenAICompatProvider(
         name="lmstudio",
-        base_url=base_url,
+        base_url=base_url or settings.local_llm_base_url,
         api_key=None,
-        default_model=model,
+        default_model=model or settings.local_llm_model,
         capabilities=ModelCapabilities(json_mode=True, tools=False, context_window=8192, is_local=True),
         timeout=180.0,
     )
 
 
 def make_llamacpp_provider(
-    base_url: str = "http://localhost:8080/v1",
-    model: str = "local-model",
+    base_url: str | None = None,
+    model: str | None = None,
 ) -> OpenAICompatProvider:
+    from app.config import get_settings
+
+    settings = get_settings()
     return OpenAICompatProvider(
         name="llamacpp",
-        base_url=base_url,
+        base_url=base_url or settings.local_llm_base_url,
         api_key=None,
-        default_model=model,
+        default_model=model or settings.local_llm_model,
         capabilities=ModelCapabilities(json_mode=True, tools=False, context_window=8192, is_local=True),
         timeout=180.0,
     )
@@ -251,25 +260,25 @@ PROVIDER_PRESETS = {
         "name": "OpenRouter",
         "default_base_url": "https://openrouter.ai/api/v1",
         "requires_key": True,
-        "example_models": ["anthropic/claude-3.5-sonnet", "openai/gpt-4o", "google/gemini-pro"],
+        "example_models": [],
     },
     "nim": {
         "name": "NVIDIA NIM",
         "default_base_url": "https://integrate.api.nvidia.com/v1",
         "requires_key": True,
-        "example_models": ["meta/llama-3.1-70b-instruct"],
+        "example_models": [],
     },
     "openai_compatible": {
         "name": "Custom OpenAI-Compatible",
         "default_base_url": "https://api.openai.com/v1",
         "requires_key": True,
-        "example_models": ["gpt-4o", "gpt-4o-mini"],
+        "example_models": [],
     },
     "ollama": {
         "name": "Ollama (Local)",
         "default_base_url": "http://localhost:11434/v1",
         "requires_key": False,
-        "example_models": ["llama3", "mistral", "codellama", "nomic-embed-text"],
+        "example_models": [],
     },
     "lmstudio": {
         "name": "LM Studio (Local)",

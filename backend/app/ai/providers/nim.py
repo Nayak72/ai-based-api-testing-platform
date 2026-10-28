@@ -15,7 +15,9 @@ class NIMProvider(OpenAICompatProvider):
         api_key: str | None = None,
         default_model: str | None = None,
     ) -> None:
-        preset = make_nim_provider(api_key=api_key, model=default_model)
+        from app.config import get_settings
+        resolved_model = default_model or get_settings().nim_default_model
+        preset = make_nim_provider(api_key=api_key, model=resolved_model)
         super().__init__(
             name=preset._name,
             base_url=preset._base_url,

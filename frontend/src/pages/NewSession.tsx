@@ -1,14 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Card, Button, Input } from '../components/ui'
+import { useQuery } from '@tanstack/react-query'
+import { Card, Button, Input, ErrorState, Skeleton } from '../components/ui'
 import {
   specsApi,
   catalogApi,
   providersApi,
   sessionsApi,
-  Spec,
-  CatalogItem,
-  ProviderProfile,
 } from '../api/endpoints'
 import {
   ShieldCheck,
@@ -22,6 +20,8 @@ import {
 } from '@phosphor-icons/react'
 import toast from 'react-hot-toast'
 
+type SourceType = 'catalog' | 'vulnshop' | 'existing' | 'url'
+
 export function NewSession() {
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
@@ -30,11 +30,9 @@ export function NewSession() {
   const [mode, setMode] = useState<'local' | 'online'>('local')
 
   // Step 2: Spec source
-  const [sourceType, setSourceType] = useState<'catalog' | 'vulnshop' | 'existing' | 'url'>('vulnshop')
-  const [specs, setSpecs] = useState<Spec[]>([])
+  const [sourceType, setSourceType] = useState<SourceType>('vulnshop')
   const [selectedSpecId, setSelectedSpecId] = useState<string>('')
-  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
-  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('jsonplaceholder')
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('')
   const [urlInput, setUrlInput] = useState<string>('')
   const [importingUrl, setImportingUrl] = useState(false)
 
@@ -47,7 +45,6 @@ export function NewSession() {
   const [ownedAttestation, setOwnedAttestation] = useState(false)
 
   // Step 4: AI & Routing
-  const [providers, setProviders] = useState<ProviderProfile[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState<string>('')
   const agentic = true
 
@@ -58,32 +55,30 @@ export function NewSession() {
   // Launch state
   const [launching, setLaunching] = useState(false)
   const [sessionName, setSessionName] = useState('Security & Functional Audit')
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [stepErrors, setStepErrors] = useState<Record<number, string>>({})
+  const firstInvalidRef = useRef<HTMLDivElement>(null)
+  const specsQuery = useQuery({ queryKey: ['specs', 'session-picker'], queryFn: () => specsApi.list({ page_size: 100 }) })
+  const catalogQuery = useQuery({ queryKey: ['catalog'], queryFn: () => catalogApi.list() })
+  const providersQuery = useQuery({ queryKey: ['providers'], queryFn: () => providersApi.list() })
+  const specs = useMemo(() => specsQuery.data?.data.specs ?? [], [specsQuery.data])
+  const catalogItems = useMemo(() => catalogQuery.data?.data.entries ?? [], [catalogQuery.data])
+  const providers = useMemo(() => providersQuery.data?.data.providers ?? [], [providersQuery.data])
+  const optionLoading = specsQuery.isLoading || catalogQuery.isLoading || providersQuery.isLoading
+  const optionError = specsQuery.isError || catalogQuery.isError || providersQuery.isError
 
   useEffect(() => {
-    // Load existing specs
-    let active = true
-    const load = async () => {
-      try {
-        const [specRes, catalogRes, providerRes] = await Promise.all([
-          specsApi.list({ page_size: 100 }), catalogApi.list(), providersApi.list(),
-        ])
-        if (!active) return
-        setSpecs(specRes.data.specs || [])
-        setCatalogItems(catalogRes.data.entries || [])
-        const list = providerRes.data.providers || []
-        setProviders(list)
-        setSelectedProviderId(list.find((provider) => provider.is_default)?.id || '')
-      } catch (err: any) {
-        if (active) setLoadError(err.response?.data?.detail || 'Unable to load session options. Please retry.')
-      }
-    }
-    void load()
-    return () => { active = false }
-  }, [])
+    const defaultProvider = providers.find((provider) => provider.is_default)
+    if (!selectedProviderId && defaultProvider) setSelectedProviderId(defaultProvider.id)
+  }, [providers, selectedProviderId])
 
-  const handleSourceChange = (type: 'catalog' | 'vulnshop' | 'existing' | 'url') => {
+  useEffect(() => {
+    if (Object.keys(stepErrors).length) firstInvalidRef.current?.focus()
+  }, [stepErrors])
+
+  const handleSourceChange = (type: SourceType) => {
     setSourceType(type)
+    setSelectedSpecId('')
+    setStepErrors((errors) => ({ ...errors, 2: '' }))
     if (type === 'vulnshop') {
       setMode('local')
       setBaseUrl('http://localhost:8001')
@@ -110,8 +105,7 @@ export function NewSession() {
       setSelectedSpecId(res.data.id)
       setSourceType('existing')
       // Refresh specs
-      const refreshed = await specsApi.list({ page_size: 100 })
-      setSpecs(refreshed.data.specs || [])
+      await specsQuery.refetch()
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Import failed')
     } finally {
@@ -120,12 +114,43 @@ export function NewSession() {
   }
 
   const toggleCategory = (cat: string) => {
+    if (cat === 'security' && mode === 'online' && !ownedAttestation) return
     setCategories((prev) =>
       prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
     )
   }
 
+  const validateStep = (currentStep: number): string | null => {
+    if (currentStep === 1 && !mode) return 'Choose a local or online execution mode.'
+    if (currentStep === 2) {
+      if (sourceType === 'catalog' && !selectedCatalogId) return 'Choose a public catalog entry before continuing.'
+      if (sourceType === 'existing' && !selectedSpecId) return 'Choose a ready specification before continuing.'
+      if (sourceType === 'url') return 'Import the specification from its URL before continuing.'
+      if (!baseUrl.trim()) return 'Enter the target base URL for this session.'
+    }
+    if (currentStep === 3 && mode === 'online' && categories.includes('security') && !ownedAttestation) return 'Confirm you are authorized before enabling online security testing.'
+    if (currentStep === 4 && categories.length === 0) return 'Select at least one test category.'
+    return null
+  }
+
+  const moveToStep = (nextStep: number) => {
+    if (nextStep > step) {
+      const error = validateStep(step)
+      if (error) {
+        setStepErrors((errors) => ({ ...errors, [step]: error }))
+        return
+      }
+    }
+    setStepErrors((errors) => ({ ...errors, [step]: '' }))
+    setStep(nextStep)
+  }
+
   const handleStartSession = async () => {
+    const error = validateStep(4)
+    if (error || !sessionName.trim()) {
+      setStepErrors((errors) => ({ ...errors, 5: error ?? 'Enter a name for this session.' }))
+      return
+    }
     setLaunching(true)
     try {
       let finalSpecId = selectedSpecId
@@ -192,7 +217,7 @@ export function NewSession() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="mx-auto max-w-5xl space-y-6 page-enter">
       {/* Title */}
       <div>
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
@@ -204,14 +229,10 @@ export function NewSession() {
         </p>
       </div>
 
-      {loadError && (
-        <div role="alert" className="rounded-12 border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-          {loadError}
-        </div>
-      )}
+      {optionError && <ErrorState title="Session options could not be loaded" description="Specifications, catalog entries, or provider profiles may be unavailable. Retry before configuring a dependent option." onRetry={() => { void specsQuery.refetch(); void catalogQuery.refetch(); void providersQuery.refetch() }} />}
 
       {/* Stepper Progress */}
-      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+      <ol className="grid grid-cols-5 gap-2 border-b border-slate-200 pb-4 dark:border-slate-800" aria-label="Session setup progress">
         {[
           { num: 1, label: 'Mode' },
           { num: 2, label: 'Target & Spec' },
@@ -219,8 +240,13 @@ export function NewSession() {
           { num: 4, label: 'AI Strategy' },
           { num: 5, label: 'Review & Launch' },
         ].map((s) => (
-          <div key={s.num} className="flex items-center gap-2">
-            <div
+          <li key={s.num} className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => s.num < step && moveToStep(s.num)}
+              disabled={s.num > step}
+              aria-current={step === s.num ? 'step' : undefined}
+              aria-label={`Step ${s.num}: ${s.label}${step > s.num ? ', complete' : step === s.num ? ', current' : ''}`}
               className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
                 step === s.num
                   ? 'bg-brand-600 text-white'
@@ -230,7 +256,7 @@ export function NewSession() {
               }`}
             >
               {step > s.num ? '✓' : s.num}
-            </div>
+            </button>
             <span
               className={`text-xs font-medium hidden sm:inline ${
                 step === s.num ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-400'
@@ -238,21 +264,26 @@ export function NewSession() {
             >
               {s.label}
             </span>
-          </div>
+          </li>
         ))}
-      </div>
+      </ol>
+
+      {stepErrors[step] && <div ref={firstInvalidRef} tabIndex={-1} role="alert" className="rounded-12 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 outline-none dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">{stepErrors[step]}</div>}
 
       {/* STEP 1: MODE */}
       {step === 1 && (
         <div className="space-y-4">
           <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Select Execution Mode</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2" role="radiogroup" aria-label="Execution mode">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === 'local'}
               onClick={() => {
                 setMode('local')
                 setBaseUrl('http://localhost:8001')
               }}
-              className={`p-6 rounded-16 border-2 cursor-pointer transition-all ${
+              className={`p-6 rounded-16 border-2 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                 mode === 'local'
                   ? 'border-brand-600 bg-brand-50/40 dark:bg-brand-950/20 shadow-sm'
                   : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300'
@@ -272,14 +303,18 @@ export function NewSession() {
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 leading-relaxed">
                 For testing local APIs, Docker targets, and VulnShop. Allows localhost (127.0.0.1, 8001, etc.) and RFC1918 private IPs. Public Internet targets are blocked.
               </p>
-            </div>
+            </button>
 
-            <div
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === 'online'}
               onClick={() => {
                 setMode('online')
-                setBaseUrl('https://jsonplaceholder.typicode.com')
+                setBaseUrl('')
+                setCategories((current) => current.filter((category) => category !== 'security'))
               }}
-              className={`p-6 rounded-16 border-2 cursor-pointer transition-all ${
+              className={`p-6 rounded-16 border-2 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                 mode === 'online'
                   ? 'border-brand-600 bg-brand-50/40 dark:bg-brand-950/20 shadow-sm'
                   : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300'
@@ -299,7 +334,7 @@ export function NewSession() {
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 leading-relaxed">
                 For testing public staging and production APIs safely. Automatically blocks internal/private IPs and AWS metadata (169.254.169.254). Strict 2 RPS rate limit.
               </p>
-            </div>
+            </button>
           </div>
         </div>
       )}
@@ -308,6 +343,8 @@ export function NewSession() {
       {step === 2 && (
         <Card className="p-6 space-y-5">
           <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">API Target & Specification</h2>
+
+          {optionLoading && <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-20 w-full" />)}</div>}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
@@ -321,7 +358,9 @@ export function NewSession() {
                 <button
                   key={s.id}
                   type="button"
-                  onClick={() => handleSourceChange(s.id as any)}
+                  onClick={() => handleSourceChange(s.id as SourceType)}
+                  role="radio"
+                  aria-checked={sourceType === s.id}
                   className={`p-3 rounded-12 border text-xs font-semibold flex flex-col items-center gap-1.5 transition-all ${
                     sourceType === s.id
                       ? 'border-brand-600 bg-brand-50/60 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 shadow-sm'
@@ -353,16 +392,19 @@ export function NewSession() {
               <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Select Pre-configured Public API
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Public catalog entry">
                 {catalogItems.map((item) => (
-                  <div
+                  <button
+                    type="button"
                     key={item.id}
+                    role="radio"
+                    aria-checked={selectedCatalogId === item.id}
                     onClick={() => {
                       setSelectedCatalogId(item.id)
                       setBaseUrl(item.base_url)
                       setSessionName(`${item.name} Assessment`)
                     }}
-                    className={`p-3 rounded-12 border cursor-pointer transition-all ${
+                    className={`p-3 rounded-12 border text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                       selectedCatalogId === item.id
                         ? 'border-brand-600 bg-brand-50/40 dark:bg-brand-950/20'
                         : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50'
@@ -370,9 +412,10 @@ export function NewSession() {
                   >
                     <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100">{item.name}</p>
                     <p className="text-[11px] text-zinc-500 font-mono mt-0.5 truncate">{item.base_url}</p>
-                  </div>
+                  </button>
                 ))}
               </div>
+              {!catalogQuery.isLoading && catalogItems.length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">No public catalog entries are available from this server.</p>}
             </div>
           )}
 
@@ -386,12 +429,14 @@ export function NewSession() {
                 onChange={(e) => setSelectedSpecId(e.target.value)}
                 className="w-full rounded-12 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               >
-                {specs.map((s) => (
+                <option value="">Select a ready specification</option>
+                {specs.filter((s) => s.status === 'ready').map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.endpoints_count} endpoints)
                   </option>
                 ))}
               </select>
+              {!specsQuery.isLoading && specs.filter((s) => s.status === 'ready').length === 0 && <p className="text-sm text-slate-500 dark:text-slate-400">No ready specifications are available. Upload or import one to continue.</p>}
             </div>
           )}
 
@@ -419,7 +464,8 @@ export function NewSession() {
               label="Target Base URL Override"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="http://localhost:8001"
+              helperText="This is the effective target URL. It is set by the selected source and can be changed intentionally."
+              placeholder={mode === 'local' ? 'http://localhost:8001' : 'https://api.example.com'}
               className="font-mono text-xs"
             />
           </div>
@@ -502,7 +548,10 @@ export function NewSession() {
                 <input
                   type="checkbox"
                   checked={ownedAttestation}
-                  onChange={(e) => setOwnedAttestation(e.target.checked)}
+                  onChange={(e) => {
+                    setOwnedAttestation(e.target.checked)
+                    if (!e.target.checked) setCategories((current) => current.filter((category) => category !== 'security'))
+                  }}
                   className="mt-0.5 rounded text-brand-600 focus:ring-brand-500"
                 />
                 <div className="text-xs">
@@ -568,12 +617,16 @@ export function NewSession() {
                 { id: 'edge', label: 'Edge & Boundaries' },
                 { id: 'malformed', label: 'Malformed Payloads' },
                 { id: 'security', label: 'OWASP Security' },
-              ].map((c) => (
+              ].map((c) => {
+                const unavailable = c.id === 'security' && mode === 'online' && !ownedAttestation
+                return (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => toggleCategory(c.id)}
-                  className={`p-2.5 rounded-8 text-xs font-semibold border transition-colors ${
+                  disabled={unavailable}
+                  aria-describedby={unavailable ? 'security-category-help' : undefined}
+                  className={`p-2.5 rounded-8 text-xs font-semibold border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                     categories.includes(c.id)
                       ? 'border-brand-600 bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300'
                       : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:bg-zinc-50'
@@ -582,8 +635,10 @@ export function NewSession() {
                   {categories.includes(c.id) ? '✓ ' : '+ '}
                   {c.label}
                 </button>
-              ))}
+                )
+              })}
             </div>
+            {mode === 'online' && !ownedAttestation && <p id="security-category-help" className="text-xs text-amber-700 dark:text-amber-300">OWASP security tests are unavailable until you confirm authorization for this online target.</p>}
           </div>
 
           {/* Intensity */}
@@ -646,7 +701,15 @@ export function NewSession() {
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-zinc-500">Primary Auth:</span>
-              <span className="font-semibold capitalize">{authType}</span>
+              <span className="font-semibold capitalize">{authType === 'none' ? 'Not configured' : `${authType.replace('_', ' ')} configured`}</span>
+            </div>
+            <div className="flex justify-between gap-4 text-xs">
+              <span className="text-zinc-500">Secondary identity:</span>
+              <span className="font-semibold capitalize">{secondaryAuthType === 'none' ? 'Not configured' : `${secondaryAuthType.replace('_', ' ')} configured`}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-zinc-500">Authorization:</span>
+              <span className="font-semibold">{mode === 'online' ? (ownedAttestation ? 'Attested' : 'Not attested') : 'Local mode policy'}</span>
             </div>
           </div>
 
@@ -664,14 +727,14 @@ export function NewSession() {
       {/* Wizard Navigation Footer */}
       <div className="flex items-center justify-between pt-2">
         {step > 1 ? (
-          <Button variant="secondary" onClick={() => setStep(step - 1)}>
+          <Button variant="secondary" onClick={() => moveToStep(step - 1)}>
             <ArrowLeft className="w-4 h-4" />
             <span>Previous</span>
           </Button>
         ) : <div />}
 
         {step < 5 && (
-          <Button onClick={() => setStep(step + 1)}>
+          <Button onClick={() => moveToStep(step + 1)}>
             <span>Next</span>
             <ArrowRight className="w-4 h-4" />
           </Button>
