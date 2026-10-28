@@ -131,8 +131,27 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
                 )
             )
             gen = GenerationOrchestrator()
-            await gen.generate_for_spec(spec_id=spec_id, user_id=user_id, categories=categories)
+
+            async def report_generation(category: str, status: str, message: str) -> None:
+                await publish(
+                    AgentEvent(
+                        session_id=session_id,
+                        agent="generator",
+                        step="generate",
+                        status=status,
+                        message=message,
+                    )
+                )
+
+            await gen.generate_for_spec(
+                spec_id=spec_id,
+                user_id=user_id,
+                categories=categories,
+                progress_callback=report_generation,
+            )
             tc_count = await test_case_repository.count_by_spec(ObjectId(spec_id))
+            if tc_count == 0:
+                raise RuntimeError("Test generation produced no test cases")
             await publish(
                 AgentEvent(
                     session_id=session_id,

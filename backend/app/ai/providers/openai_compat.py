@@ -168,7 +168,7 @@ class OpenAICompatProvider(AIProvider):
 
 def make_openrouter_provider(
     api_key: str | None = None,
-    model: str = "anthropic/claude-3.5-sonnet",
+    model: str | None = None,
     extra_headers: dict | None = None,
 ) -> OpenAICompatProvider:
     from app.config import get_settings

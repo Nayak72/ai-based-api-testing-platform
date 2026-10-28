@@ -154,11 +154,28 @@ class GenerationCacheRepository:
         }
         if cache.model:
             query["model"] = cache.model
-        await self.collection.replace_one(
-            query,
-            cache.model_dump(by_alias=True),
-            upsert=True,
-        )
+
+        doc = cache.model_dump(by_alias=True)
+        if not doc.get("_id"):
+            doc["_id"] = ObjectId()
+
+        try:
+            await self.collection.replace_one(
+                query,
+                doc,
+                upsert=True,
+            )
+        except Exception as e:
+            if "duplicate key error" in str(e) and ("_id: null" in str(e) or "_id" in str(e)):
+                await self.collection.delete_many({"_id": None})
+                doc["_id"] = doc.get("_id") or ObjectId()
+                await self.collection.replace_one(
+                    query,
+                    doc,
+                    upsert=True,
+                )
+            else:
+                raise
 
 
 generation_cache_repository = GenerationCacheRepository()

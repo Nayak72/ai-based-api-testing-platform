@@ -50,6 +50,14 @@ export function SessionDetail() {
     fetchSession()
   }, [id])
 
+  // Session status is persisted separately from SSE events. Poll while active
+  // so the header cannot remain stale during long generation/execution phases.
+  useEffect(() => {
+    if (!id || !session || ['completed', 'failed', 'cancelled'].includes(session.status)) return
+    const timer = window.setInterval(fetchSession, 2000)
+    return () => window.clearInterval(timer)
+  }, [id, session?.status])
+
   const { events, isConnected, isCompleted } = useSSE(id || null, {
     onEvent: (event) => {
       if (event.status === 'waiting_human' || event.step === 'plan') {

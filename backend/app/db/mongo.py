@@ -53,6 +53,10 @@ async def create_indexes() -> None:
     await db.api_specs.create_index("created_at", expireAfterSeconds=7776000)  # 90 days optional
 
     # generation_cache
+    try:
+        await db.generation_cache.delete_many({"_id": None})
+    except Exception:
+        pass
     await db.generation_cache.create_index(
         [("spec_id", 1), ("endpoint_id", 1), ("category", 1), ("prompt_version", 1)],
         unique=True,

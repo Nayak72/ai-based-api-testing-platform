@@ -65,9 +65,7 @@ class BaseGenerator(ABC):
         owasp_mapping: dict | None = None,
     ) -> list[TestCaseCreate]:
         """Shared parser for all generators. Reduces duplication across functional.py."""
-        import json as _json
-
-        data = _json.loads(content)
+        data = cls._parse_json_response(content)
         test_cases = []
         for item in data.get("test_cases", []):
             subcat = item.get("subcategory", subcategory_default)
@@ -101,6 +99,27 @@ class BaseGenerator(ABC):
     def _compute_request_hash(self, request: dict) -> str:
         normalized = json.dumps(request, sort_keys=True, separators=(",", ":"))
         return f"sha256:{hashlib.sha256(normalized.encode()).hexdigest()}"
+
+    @staticmethod
+    def _parse_json_response(content: str) -> dict:
+        """Parse provider output while tolerating common LLM JSON damage."""
+        try:
+            import json_repair
+
+            value = json_repair.loads(content)
+            if isinstance(value, dict):
+                return value
+        except Exception:
+            pass
+
+        cleaned = content.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.splitlines()
+            cleaned = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:]).strip()
+        value = json.loads(cleaned)
+        if not isinstance(value, dict):
+            raise ValueError("Generator response must be a JSON object")
+        return value
 
     async def generate_for_endpoint(
         self,

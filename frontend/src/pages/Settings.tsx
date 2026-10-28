@@ -45,7 +45,7 @@ export function Settings() {
   const [newProfileName, setNewProfileName] = useState('')
   const [newProviderType, setNewProviderType] = useState('openrouter')
   const [newBaseUrl, setNewBaseUrl] = useState('https://openrouter.ai/api/v1')
-  const [newModel, setNewModel] = useState('anthropic/claude-3.5-sonnet')
+  const [newModel, setNewModel] = useState('')
   const [newApiKey, setNewApiKey] = useState('')
   const [creatingProfile, setCreatingProfile] = useState(false)
 
@@ -170,7 +170,7 @@ export function Settings() {
     setNewProviderType(type)
     if (type === 'openrouter') {
       setNewBaseUrl('https://openrouter.ai/api/v1')
-      setNewModel('anthropic/claude-3.5-sonnet')
+      setNewModel('openai/gpt-4o-mini')
     } else if (type === 'nim') {
       setNewBaseUrl('https://integrate.api.nvidia.com/v1')
       setNewModel('meta/llama-3.1-70b-instruct')
@@ -537,7 +537,7 @@ export function Settings() {
             label="Profile Name"
             value={newProfileName}
             onChange={(e) => setNewProfileName(e.target.value)}
-            placeholder="e.g. Claude 3.5 Sonnet (OpenRouter)"
+            placeholder="e.g. OpenRouter LLM"
             required
           />
 
@@ -583,7 +583,7 @@ export function Settings() {
             label="Default Model"
             value={newModel}
             onChange={(e) => setNewModel(e.target.value)}
-            placeholder="anthropic/claude-3.5-sonnet"
+            placeholder="e.g. openai/gpt-4o-mini"
             className="font-mono text-xs"
             required
           />

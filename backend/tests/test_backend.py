@@ -186,3 +186,20 @@ def test_make_json_serializable_handles_datetimes_and_objects():
     assert str(oid) in dumped
     assert now.isoformat() in dumped
     assert today.isoformat() in dumped
+
+
+def test_openrouter_model_from_env_and_settings():
+    from app.config import get_settings
+    from app.ai.providers.openrouter import OpenRouterProvider
+    from app.ai.providers.openai_compat import make_openrouter_provider
+
+    settings = get_settings()
+    assert settings.openrouter_default_model != "anthropic/claude-3.5-sonnet"
+
+    # OpenRouterProvider defaults to settings model
+    provider = OpenRouterProvider()
+    assert provider.default_model == settings.openrouter_default_model
+
+    # make_openrouter_provider defaults to settings model
+    preset = make_openrouter_provider()
+    assert preset.default_model == settings.openrouter_default_model

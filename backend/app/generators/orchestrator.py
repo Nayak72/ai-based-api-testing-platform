@@ -1,3 +1,5 @@
+from collections.abc import Awaitable, Callable
+
 import structlog
 
 from app.ai import create_orchestrator
@@ -40,6 +42,7 @@ class GenerationOrchestrator:
         prompt_version: str = "v1",
         dry_run: bool = False,
         model: str | None = None,
+        progress_callback: Callable[[str, str, str], Awaitable[None]] | None = None,
     ):
         from bson import ObjectId
 
@@ -65,6 +68,8 @@ class GenerationOrchestrator:
                 generator.PROMPT_VERSION = prompt_version
 
                 try:
+                    if progress_callback:
+                        await progress_callback(category, "started", f"Generating {category} tests for {endpoint['endpoint_id']}...")
                     test_cases = await generator.generate_for_endpoint(
                         spec_id=ObjectId(spec_id),
                         endpoint=endpoint,
@@ -76,6 +81,8 @@ class GenerationOrchestrator:
                     if not dry_run and test_cases:
                         await test_case_repository.bulk_upsert(test_cases)
                         logger.info("Test cases saved", count=len(test_cases), category=category)
+                    if progress_callback:
+                        await progress_callback(category, "completed", f"Generated {len(test_cases)} {category} tests for {endpoint['endpoint_id']}")
 
                 except Exception as e:
                     logger.error(
@@ -84,6 +91,8 @@ class GenerationOrchestrator:
                         category=category,
                         error=str(e),
                     )
+                    if progress_callback:
+                        await progress_callback(category, "failed", f"{category} generation failed for {endpoint['endpoint_id']}: {e}")
 
         logger.info("Generation completed", spec_id=spec_id)
 

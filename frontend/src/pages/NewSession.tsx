@@ -517,7 +517,7 @@ export function NewSession() {
               onChange={(e) => setSelectedProviderId(e.target.value)}
               className="w-full rounded-12 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20"
             >
-              <option value="">Default Cloud (OpenRouter / Claude 3.5 Sonnet)</option>
+              <option value="">Default Cloud (From Server .env)</option>
               {providers.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} ({p.preset ?? p.provider_type} — {p.model ?? p.default_model})

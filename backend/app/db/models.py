@@ -165,7 +165,7 @@ class APISpecInDB(APISpecBase):
 
 
 class GenerationCache(BaseModel):
-    id: PyObjectId | None = Field(alias="_id", default=None)
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     spec_id: PyObjectId
     endpoint_id: str
     category: str

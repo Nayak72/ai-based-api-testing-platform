@@ -1,12 +1,15 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_env_file = Path(__file__).resolve().parent.parent / ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(_env_file, ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -48,7 +51,7 @@ class Settings(BaseSettings):
     # OpenRouter
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_default_model: str = "anthropic/claude-3.5-sonnet"
+    openrouter_default_model: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
     openrouter_site_url: str = "http://localhost:8000"
     openrouter_site_name: str = "API Testing Platform"
 

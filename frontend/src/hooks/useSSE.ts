@@ -37,7 +37,13 @@ export function useSSE(sessionId: string | null, options: UseSSEOptions = {}) {
     es.onmessage = (e) => {
       try {
         const parsed: AgentEvent = JSON.parse(e.data)
-        setEvents((prev) => [...prev, parsed])
+        setEvents((prev) => {
+          const eventKey = `${parsed.ts}:${parsed.agent}:${parsed.step}:${parsed.message}`
+          if (prev.some((item) => `${item.ts}:${item.agent}:${item.step}:${item.message}` === eventKey)) {
+            return prev
+          }
+          return [...prev, parsed]
+        })
         options.onEvent?.(parsed)
 
         if (parsed.step === 'session_done' || parsed.step === 'session_error') {

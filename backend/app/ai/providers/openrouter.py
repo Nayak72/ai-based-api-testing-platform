@@ -15,7 +15,9 @@ class OpenRouterProvider(OpenAICompatProvider):
         api_key: str | None = None,
         default_model: str | None = None,
     ) -> None:
-        preset = make_openrouter_provider(api_key=api_key, model=default_model or "anthropic/claude-3.5-sonnet")
+        from app.config import get_settings
+        resolved_model = default_model or get_settings().openrouter_default_model
+        preset = make_openrouter_provider(api_key=api_key, model=resolved_model)
         super().__init__(
             name=preset._name,
             base_url=preset._base_url,
