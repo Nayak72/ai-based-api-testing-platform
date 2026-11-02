@@ -69,6 +69,12 @@ class Settings(BaseSettings):
     ai_fallback_provider: str = ""
     ai_max_retries_per_provider: int = 2
     ai_request_timeout: float = 60.0
+    ai_max_output_tokens: int = 4096
+    provider_circuit_failures: int = 3
+    provider_circuit_cooldown_seconds: float = 30.0
+    max_tests_per_call: int = 20
+    generation_concurrency: int = 4
+    min_generation_coverage: float = 0.8
 
     # Test Execution
     default_concurrency: int = 10

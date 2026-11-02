@@ -85,7 +85,7 @@ class TriageAgent(BaseAgent):
             return "real_bug"
         if result.response.status_code == 200 and result.category == "edge":
             return "test_bug"
-        return "real_bug"
+        return "spec_drift"
 
     @staticmethod
     def _recommendation(verdict: str) -> str:

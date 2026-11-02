@@ -52,7 +52,8 @@ class OpenAICompatProvider(AIProvider):
         self._capabilities = capabilities or ModelCapabilities()
         self._extra_headers = extra_headers or {}
         # Local models get a longer timeout by default
-        self._timeout = timeout or (180.0 if self._capabilities.is_local else 60.0)
+        from app.config import get_settings
+        self._timeout = timeout or (180.0 if self._capabilities.is_local else get_settings().ai_request_timeout)
         self._client = None
 
     @property
@@ -111,8 +112,25 @@ class OpenAICompatProvider(AIProvider):
             self._raise_provider_error(e, latency_ms)
 
         latency_ms = int((time.perf_counter() - start) * 1000)
-        content = response.choices[0].message.content or ""
-        tokens_used = response.usage.total_tokens if response.usage else 0
+        choice = response.choices[0]
+        message = choice.message
+        content = message.content or ""
+        reasoning = getattr(message, "reasoning_content", None) or getattr(message, "reasoning", None)
+        if not content and reasoning:
+            content = reasoning
+        finish_reason = getattr(choice, "finish_reason", None)
+        if finish_reason == "length":
+            raise ProviderError(self.name, "truncated", "Provider stopped at the output token limit")
+        if not content.strip():
+            raise ProviderError(self.name, "empty_response", "Provider returned HTTP 200 with empty content")
+        if "<think>" in content:
+            import re
+            content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+        if not content:
+            raise ProviderError(self.name, "empty_response", "Provider returned reasoning without a usable answer")
+        usage = response.usage
+        tokens_used = usage.total_tokens if usage else 0
+        completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
 
         return GenerationResponse(
             content=content,
@@ -121,20 +139,26 @@ class OpenAICompatProvider(AIProvider):
             tokens_used=tokens_used,
             latency_ms=latency_ms,
             raw_response=response.model_dump() if hasattr(response, "model_dump") else {},
+            finish_reason=finish_reason,
+            completion_tokens=completion_tokens,
+            content_len=len(content),
+            reasoning_present=bool(reasoning),
         )
 
     def _raise_provider_error(self, exc: Exception, latency_ms: int) -> None:
-        exc_str = str(exc).lower()
-        exc_type = type(exc).__name__.lower()
-
-        if "401" in exc_str or "403" in exc_str or "authentication" in exc_str or "unauthorized" in exc_str:
+        exc_str = str(exc)
+        exc_type = type(exc).__name__
+        status = getattr(exc, "status_code", None)
+        if status in (401, 403) or exc_type in {"AuthenticationError", "PermissionDeniedError"}:
             raise ProviderError(provider=self.name, code="auth_error", message=str(exc))
-        if "429" in exc_str or "rate" in exc_str:
+        if status == 429 or exc_type == "RateLimitError":
             raise ProviderError(provider=self.name, code="rate_limit", message=str(exc))
-        if "timeout" in exc_type or "timeout" in exc_str:
+        if "Timeout" in exc_type or exc_type in {"APITimeoutError", "ConnectTimeout"}:
             raise ProviderError(provider=self.name, code="timeout", message=str(exc))
-        if "500" in exc_str or "502" in exc_str or "503" in exc_str:
+        if status is not None and status >= 500:
             raise ProviderError(provider=self.name, code="server_error", message=str(exc))
+        if exc_type in {"BadRequestError", "UnprocessableEntityError"} and "response_format" in exc_str.lower():
+            raise ProviderError(provider=self.name, code="unsupported_response_format", message=str(exc))
         raise ProviderError(provider=self.name, code="unknown_error", message=str(exc))
 
     async def health_check(self) -> bool:

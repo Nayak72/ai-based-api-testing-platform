@@ -43,6 +43,7 @@ class GenerationOrchestrator:
         dry_run: bool = False,
         model: str | None = None,
         progress_callback: Callable[[str, str, str], Awaitable[None]] | None = None,
+        plan: dict | None = None,
     ):
         from bson import ObjectId
 
@@ -56,12 +57,21 @@ class GenerationOrchestrator:
             return
 
         endpoints = extract_endpoints(spec.parsed_spec)
+        planned_units = {
+            unit.get("endpoint_id"): set(unit.get("categories") or categories)
+            for unit in (plan or {}).get("endpoints", [])
+            if unit.get("endpoint_id")
+        }
         logger.info(
             "Starting generation", spec_id=spec_id, endpoints=len(endpoints), categories=categories, model=target_model
         )
+        generated_count = 0
+        failed_count = 0
 
         for endpoint in endpoints:
             for category in categories:
+                if planned_units and category not in planned_units.get(endpoint["endpoint_id"], set()):
+                    continue
                 if category not in self.generators:
                     continue
                 generator = self.generators[category]
@@ -81,10 +91,12 @@ class GenerationOrchestrator:
                     if not dry_run and test_cases:
                         await test_case_repository.bulk_upsert(test_cases)
                         logger.info("Test cases saved", count=len(test_cases), category=category)
+                    generated_count += len(test_cases)
                     if progress_callback:
                         await progress_callback(category, "completed", f"Generated {len(test_cases)} {category} tests for {endpoint['endpoint_id']}")
 
                 except Exception as e:
+                    failed_count += 1
                     logger.error(
                         "Generation failed for endpoint",
                         endpoint_id=endpoint["endpoint_id"],
@@ -94,7 +106,8 @@ class GenerationOrchestrator:
                     if progress_callback:
                         await progress_callback(category, "failed", f"{category} generation failed for {endpoint['endpoint_id']}: {e}")
 
-        logger.info("Generation completed", spec_id=spec_id)
+        logger.info("Generation completed", spec_id=spec_id, generated=generated_count, failed=failed_count)
+        return {"generated": generated_count, "failed": failed_count}
 
     async def close(self) -> None:
         for provider in self.ai_orchestrator.providers:

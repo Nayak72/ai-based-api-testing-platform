@@ -25,6 +25,7 @@ class GenerationRequest:
     response_format: str = "json_object"
     schema: dict | None = None
     model: str | None = None
+    timeout: float | None = None
 
 
 @dataclass
@@ -35,6 +36,10 @@ class GenerationResponse:
     tokens_used: int
     latency_ms: int
     raw_response: dict
+    finish_reason: str | None = None
+    completion_tokens: int = 0
+    content_len: int = 0
+    reasoning_present: bool = False
 
 
 class ProviderError(Exception):
@@ -92,7 +97,7 @@ class AIProvider(ABC):
                 return await self.generate(request)
             except ProviderError as e:
                 last_error = e
-                if e.code in ("rate_limit", "server_error", "timeout"):
+                if e.code in ("rate_limit", "server_error", "timeout", "empty_response", "truncated", "invalid_output"):
                     if attempt < max_retries:
                         delay = base_delay * (2**attempt) + random.uniform(0, 0.5)
                         if e.retry_after:

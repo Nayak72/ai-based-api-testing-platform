@@ -263,6 +263,7 @@ class RunConfig(BaseModel):
     owned_host_attestation: bool = False
     routing: dict | None = None  # LLMRouter config
     auth_secret_ref: str | None = None  # owner-scoped session holding encrypted auth material
+    test_case_ids: list[str] | None = None  # immutable session/run scope
 
 
 class RunSummary(BaseModel):

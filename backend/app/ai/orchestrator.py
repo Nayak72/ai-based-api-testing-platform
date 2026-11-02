@@ -1,3 +1,8 @@
+import asyncio
+import random
+import time
+from collections.abc import Callable
+
 import structlog
 
 from app.ai.providers.base import (
@@ -24,15 +29,53 @@ class AIOrchestrator:
         self.providers = [primary, fallback]
         self.primary_provider = primary.name
         self.max_retries = max_retries_per_provider
+        from app.config import get_settings
+        settings = get_settings()
+        self._failure_threshold = settings.provider_circuit_failures
+        self._cooldown = settings.provider_circuit_cooldown_seconds
+        self._circuits: dict[ProviderName, dict[str, float]] = {
+            provider.name: {"failures": 0, "opened_at": 0} for provider in self.providers
+        }
 
-    async def generate(self, request: GenerationRequest) -> GenerationResponse:
+    def _circuit_open(self, provider: AIProvider) -> bool:
+        state = self._circuits[provider.name]
+        if state["failures"] < self._failure_threshold:
+            return False
+        if time.monotonic() - state["opened_at"] >= self._cooldown:
+            state["failures"] = 0
+            return False
+        return True
+
+    def _record_failure(self, provider: AIProvider) -> None:
+        state = self._circuits[provider.name]
+        state["failures"] += 1
+        if state["failures"] >= self._failure_threshold:
+            state["opened_at"] = time.monotonic()
+
+    async def generate(
+        self,
+        request: GenerationRequest,
+        validator: Callable[[GenerationResponse], object] | None = None,
+    ) -> GenerationResponse | tuple[GenerationResponse, object]:
         last_error = None
         for provider in self.providers:
+            if self._circuit_open(provider):
+                logger.warning("Provider circuit open", provider=provider.name.value)
+                continue
             for attempt in range(self.max_retries + 1):
                 try:
-                    return await provider.generate_with_retry(request, max_retries=0)
+                    response = await provider.generate(request)
+                    if validator is not None:
+                        validated = validator(response)
+                        return response, validated
+                    self._circuits[provider.name]["failures"] = 0
+                    return response
                 except ProviderError as e:
                     last_error = e
+                    if e.code == "unsupported_response_format" and request.response_format:
+                        request.response_format = "text"
+                        logger.info("Retrying without response format", provider=provider.name.value)
+                        continue
                     logger.warning(
                         "Provider attempt failed",
                         provider=provider.name.value,
@@ -40,7 +83,21 @@ class AIOrchestrator:
                         error_code=e.code,
                         message=e.message,
                     )
-                    break
+                    retryable = e.code in {
+                        "rate_limit", "server_error", "timeout", "empty_response", "truncated", "invalid_output"
+                    }
+                    if retryable:
+                        self._record_failure(provider)
+                    if not retryable or attempt >= self.max_retries:
+                        break
+                    delay = e.retry_after or (0.5 * (2**attempt) + random.uniform(0, 0.25))
+                    await asyncio.sleep(delay)
+                except Exception as e:
+                    last_error = ProviderError(provider.name, "invalid_output", str(e))
+                    self._record_failure(provider)
+                    logger.warning("Provider response validation failed", provider=provider.name.value, error=str(e))
+                    if attempt >= self.max_retries:
+                        break
         raise ProviderError(
             provider=self.primary_provider,
             code="all_providers_failed",
@@ -56,6 +113,9 @@ class AIOrchestrator:
             except Exception:
                 results[provider.name] = False
         return results
+
+    async def close(self) -> None:
+        await asyncio.gather(*(provider.close() for provider in self.providers), return_exceptions=True)
 
 
 def create_orchestrator(

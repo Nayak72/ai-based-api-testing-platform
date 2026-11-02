@@ -126,9 +126,23 @@ class RunOrchestrator:
                 limit=10000,
             )
 
-            filtered_cases = [tc for tc in test_cases if tc.category in run.config.categories]
+            scoped_ids = set(run.config.test_case_ids or [])
+            filtered_cases = [
+                tc for tc in test_cases
+                if tc.category in run.config.categories and (not scoped_ids or str(tc.id) in scoped_ids)
+            ]
             if len(filtered_cases) > run.config.max_total_requests:
-                filtered_cases = filtered_cases[: run.config.max_total_requests]
+                # Preserve category coverage when enforcing the request budget.
+                by_category = {category: [] for category in run.config.categories}
+                for tc in filtered_cases:
+                    by_category.setdefault(tc.category, []).append(tc)
+                balanced = []
+                while len(balanced) < run.config.max_total_requests and any(by_category.values()):
+                    for category in run.config.categories:
+                        bucket = by_category.get(category, [])
+                        if bucket and len(balanced) < run.config.max_total_requests:
+                            balanced.append(bucket.pop(0))
+                filtered_cases = balanced
                 logger.warning(
                     "Run request budget enforced",
                     run_id=run_id,

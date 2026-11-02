@@ -106,7 +106,7 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
     from app.agents.triage import TriageAgent
     from app.api.schemas.runs import RunConfigSchema, RunCreateRequest
     from app.db.mongo import get_collection
-    from app.db.repositories import run_repository, test_case_repository
+    from app.db.repositories import provider_repository, run_repository, test_case_repository
     from app.executor.runner import RunOrchestrator
     from app.generators.orchestrator import GenerationOrchestrator
 
@@ -116,12 +116,12 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
     mode = state.get("mode", "local")
 
     try:
-        # Check if test cases exist, otherwise generate them
-        existing_tc_count = await test_case_repository.count_by_spec(ObjectId(spec_id))
+        # Generation is idempotent through the generation cache/upsert layer. Always
+        # invoke it for the requested units so a partially completed prior run can
+        # fill missing endpoint/category coverage.
         categories = state.get("categories") or ["functional", "edge", "malformed", "security"]
 
-        if existing_tc_count == 0:
-            await publish(
+        await publish(
                 AgentEvent(
                     session_id=session_id,
                     agent="generator",
@@ -129,11 +129,25 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
                     status="started",
                     message=f"Generating test cases for {len(categories)} categories...",
                 )
-            )
-            gen = GenerationOrchestrator()
+        )
+        primary_provider = None
+        selected_model = None
+        selected_api_key = None
+        profile_id = (state.get("routing") or {}).get("provider_profile_id")
+        if profile_id:
+            profile = await provider_repository.get_by_id(ObjectId(profile_id), ObjectId(user_id))
+            if profile:
+                primary_provider = profile.preset.value
+                selected_model = profile.model
+                selected_api_key = provider_repository.get_decrypted_key(profile)
+        gen = GenerationOrchestrator(
+            primary_provider=primary_provider,
+            model=selected_model,
+            api_key=selected_api_key,
+        )
 
-            async def report_generation(category: str, status: str, message: str) -> None:
-                await publish(
+        async def report_generation(category: str, status: str, message: str) -> None:
+            await publish(
                     AgentEvent(
                         session_id=session_id,
                         agent="generator",
@@ -141,26 +155,36 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
                         status=status,
                         message=message,
                     )
-                )
+            )
 
-            await gen.generate_for_spec(
+        generation_result = await gen.generate_for_spec(
                 spec_id=spec_id,
                 user_id=user_id,
                 categories=categories,
                 progress_callback=report_generation,
-            )
-            tc_count = await test_case_repository.count_by_spec(ObjectId(spec_id))
-            if tc_count == 0:
-                raise RuntimeError("Test generation produced no test cases")
-            await publish(
+                plan=state.get("plan"),
+        )
+        await gen.close()
+        tc_count = await test_case_repository.count_by_spec(ObjectId(spec_id))
+        if tc_count == 0:
+            raise RuntimeError("Test generation produced no test cases")
+        await publish(
                 AgentEvent(
                     session_id=session_id,
                     agent="generator",
                     step="generate",
-                    status="completed",
-                    message=f"Generated {tc_count} test cases",
+                    status="completed_with_errors" if generation_result and generation_result.get("failed") else "completed",
+                    message=(
+                        f"Generated {tc_count} test cases; {generation_result['failed']} generation units failed"
+                        if generation_result and generation_result.get("failed")
+                        else f"Generated {tc_count} test cases"
+                    ),
                 )
-            )
+        )
+
+        scoped_cases = await test_case_repository.list_by_spec(ObjectId(spec_id), limit=10000)
+        scoped_cases = [tc for tc in scoped_cases if tc.category in categories]
+        test_case_ids = [str(tc.id) for tc in scoped_cases]
 
         # Create test run if not present
         if not state.get("run_id"):
@@ -172,6 +196,7 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
                 owned_host_attestation=state.get("owned_host_attestation", False),
                 routing=state.get("routing") or None,
                 auth_secret_ref=session_id,
+                test_case_ids=test_case_ids,
             )
             req = RunCreateRequest(
                 spec_id=spec_id,
@@ -200,12 +225,13 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
         run = await run_repository.get_by_id(ObjectId(state["run_id"]), ObjectId(user_id))
         if not run or run.status in ("failed", "cancelled"):
             raise RuntimeError("Test execution did not complete successfully")
+        final_status = "completed_with_errors" if run.status == "completed_with_errors" else "completed"
         await publish(
             AgentEvent(
                 session_id=session_id,
                 agent="executor",
                 step="execute",
-                status=final_status,
+                status="completed_with_errors" if final_status == "completed_with_errors" else "completed",
                 message="Test execution finished",
             )
         )
@@ -215,7 +241,6 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
         state = await ReporterAgent().run(state)
 
         # Mark session completed
-        final_status = "completed_with_errors" if run.status == "completed_with_errors" else "completed"
         session_update = await get_collection("sessions").update_one(
             {"_id": ObjectId(session_id), "status": "running"},
             {"$set": {"status": final_status}},
