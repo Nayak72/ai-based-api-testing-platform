@@ -9,7 +9,8 @@ from app.api.schemas.test_cases import (
     TestCaseResponse,
     TestCaseUpdateRequest,
 )
-from app.db.repositories import spec_repository, test_case_repository, user_repository
+from app.config import get_settings
+from app.db.repositories import spec_repository, test_case_repository
 from app.generators.orchestrator import GenerationOrchestrator
 
 logger = structlog.get_logger()
@@ -38,19 +39,10 @@ async def generate_test_cases(
 
     categories = request.categories or ["functional", "edge", "malformed", "security"]
 
-    user = await user_repository.get_by_id(user_id)
-    user_ai = getattr(user, "ai_settings", {}) or {} if user else {}
-    provider = request.provider or user_ai.get("primary_provider")
-    model = request.model or user_ai.get("default_model")
-    api_key = request.api_key or (
-        user_ai.get("nim_api_key") if provider == "nim" else user_ai.get("openrouter_api_key")
-    )
-
-    orchestrator = GenerationOrchestrator(
-        primary_provider=provider,
-        model=model,
-        api_key=api_key,
-    )
+    settings = get_settings()
+    provider = settings.ai_primary_provider
+    model = settings.nim_default_model if provider == "nim" else settings.openrouter_default_model
+    orchestrator = GenerationOrchestrator()
     background_tasks.add_task(
         orchestrator.generate_for_spec,
         spec_id=obj_id,

@@ -54,19 +54,19 @@ class Settings(BaseSettings):
 
     # OpenRouter
     openrouter_api_key: str | None = None
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_base_url: str = ""
     openrouter_default_model: str = ""
-    openrouter_site_url: str = "http://localhost:8000"
-    openrouter_site_name: str = "API Testing Platform"
+    openrouter_site_url: str = ""
+    openrouter_site_name: str = ""
 
     # NVIDIA NIM
     nim_api_key: str | None = None
-    nim_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nim_base_url: str = ""
     nim_default_model: str = ""
 
     # AI Orchestrator
-    ai_primary_provider: str = "openrouter"
-    ai_fallback_provider: str = "nim"
+    ai_primary_provider: str = ""
+    ai_fallback_provider: str = ""
     ai_max_retries_per_provider: int = 2
     ai_request_timeout: float = 60.0
 
@@ -100,7 +100,7 @@ class Settings(BaseSettings):
 
     # Agentic Mode
     agentic_mode: bool = False
-    local_llm_base_url: str = "http://localhost:11434/v1"
+    local_llm_base_url: str = ""
     local_llm_model: str = ""
 
     # Target Safety
@@ -147,6 +147,23 @@ class Settings(BaseSettings):
             raise ValueError("SECRETS_ENCRYPTION_KEY must be a valid Fernet key") from exc
         if self.algorithm != "HS256":
             raise ValueError("Only JWT_ALGORITHM=HS256 is supported")
+        return self
+
+    @model_validator(mode="after")
+    def validate_provider_configuration(self) -> "Settings":
+        """Provider credentials, URLs, and models must come from the environment."""
+        supported = {"nim", "openrouter"}
+        if self.ai_primary_provider not in supported or self.ai_fallback_provider not in supported:
+            raise ValueError("AI provider routing must use supported providers configured in .env")
+        if self.ai_primary_provider == self.ai_fallback_provider:
+            raise ValueError("AI_PRIMARY_PROVIDER and AI_FALLBACK_PROVIDER must be different")
+        configured = {
+            "nim": (self.nim_api_key, self.nim_base_url, self.nim_default_model),
+            "openrouter": (self.openrouter_api_key, self.openrouter_base_url, self.openrouter_default_model),
+        }
+        for provider in {self.ai_primary_provider, self.ai_fallback_provider}:
+            if not all(configured[provider]):
+                raise ValueError(f"{provider} requires API key, base URL, and default model in .env")
         return self
 
 

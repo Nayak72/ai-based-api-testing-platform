@@ -188,13 +188,16 @@ def test_make_json_serializable_handles_datetimes_and_objects():
     assert today.isoformat() in dumped
 
 
-def test_openrouter_model_from_env_and_settings():
+def test_provider_models_and_routing_come_from_environment_settings():
     from app.config import get_settings
     from app.ai.providers.openrouter import OpenRouterProvider
     from app.ai.providers.openai_compat import make_openrouter_provider
 
     settings = get_settings()
-    assert settings.openrouter_default_model != "anthropic/claude-3.5-sonnet"
+    assert settings.ai_primary_provider == "nim"
+    assert settings.nim_api_key
+    assert settings.nim_base_url
+    assert settings.nim_default_model
 
     # OpenRouterProvider defaults to settings model
     provider = OpenRouterProvider()
@@ -210,6 +213,13 @@ def test_openrouter_model_from_env_and_settings():
     assert nim_provider.default_model == settings.nim_default_model
     nim_preset = make_nim_provider()
     assert nim_preset.default_model == settings.nim_default_model
+
+    from app.ai.providers.openai_compat import get_provider_presets
+
+    presets = get_provider_presets()
+    assert presets["nim"]["default_base_url"] == settings.nim_base_url
+    assert presets["nim"]["default_model"] == settings.nim_default_model
+    assert "api_key" not in presets["nim"]
 
 
 def test_spec_models_default_status():

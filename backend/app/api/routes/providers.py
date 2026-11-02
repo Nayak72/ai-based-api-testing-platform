@@ -36,9 +36,9 @@ def _safe_profile(profile) -> dict:
 @router.get("/presets")
 async def list_presets():
     """Return all known provider presets with defaults."""
-    from app.ai.providers.openai_compat import PROVIDER_PRESETS
+    from app.ai.providers.openai_compat import get_provider_presets
 
-    return {"presets": PROVIDER_PRESETS}
+    return {"presets": get_provider_presets()}
 
 
 @router.get("/ollama/models")

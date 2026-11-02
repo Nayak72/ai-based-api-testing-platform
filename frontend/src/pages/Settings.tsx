@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { authApi, providersApi, ProviderProfile } from '../api/endpoints'
+import { authApi, providersApi, ProviderPreset, ProviderProfile } from '../api/endpoints'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -43,8 +43,9 @@ export function Settings() {
 
   // Profile Create Form
   const [newProfileName, setNewProfileName] = useState('')
-  const [newProviderType, setNewProviderType] = useState('openrouter')
-  const [newBaseUrl, setNewBaseUrl] = useState('https://openrouter.ai/api/v1')
+  const [providerPresets, setProviderPresets] = useState<Record<string, ProviderPreset>>({})
+  const [newProviderType, setNewProviderType] = useState('nim')
+  const [newBaseUrl, setNewBaseUrl] = useState('')
   const [newModel, setNewModel] = useState('')
   const [newApiKey, setNewApiKey] = useState('')
   const [creatingProfile, setCreatingProfile] = useState(false)
@@ -66,6 +67,16 @@ export function Settings() {
 
   useEffect(() => {
     fetchProfiles()
+    void providersApi.presets().then((res) => {
+      const presets = res.data.presets
+      setProviderPresets(presets)
+      const configuredDefault = presets.nim ? 'nim' : Object.keys(presets)[0]
+      if (configuredDefault) {
+        setNewProviderType(configuredDefault)
+        setNewBaseUrl(presets[configuredDefault].default_base_url)
+        setNewModel(presets[configuredDefault].default_model)
+      }
+    }).catch(() => toast.error('Failed to load configured provider defaults'))
   }, [])
 
   // Execution Defaults
@@ -168,22 +179,9 @@ export function Settings() {
 
   const handleProviderTypePreset = (type: string) => {
     setNewProviderType(type)
-    if (type === 'openrouter') {
-      setNewBaseUrl('https://openrouter.ai/api/v1')
-      setNewModel('openai/gpt-4o-mini')
-    } else if (type === 'nim') {
-      setNewBaseUrl('https://integrate.api.nvidia.com/v1')
-      setNewModel('meta/llama-3.1-70b-instruct')
-    } else if (type === 'ollama') {
-      setNewBaseUrl('http://localhost:11434/v1')
-      setNewModel('llama3')
-    } else if (type === 'lmstudio') {
-      setNewBaseUrl('http://localhost:1234/v1')
-      setNewModel('default')
-    } else if (type === 'llamacpp') {
-      setNewBaseUrl('http://localhost:8080/v1')
-      setNewModel('default')
-    }
+    const preset = providerPresets[type]
+    setNewBaseUrl(preset?.default_base_url ?? '')
+    setNewModel(preset?.default_model ?? '')
   }
 
   const handleSaveExecutionSettings = (e: React.FormEvent) => {
@@ -319,7 +317,7 @@ export function Settings() {
                 <div>
                   <CardTitle>AI Provider Profiles</CardTitle>
                   <CardDescription>
-                    Configure Cloud (OpenRouter, NIM) and Local (Ollama, LM Studio) AI connections. API keys are encrypted server-side and never stored in localStorage.
+                    Runtime provider defaults are loaded from the server configuration. Profile keys, when used, are encrypted server-side and never stored in localStorage.
                   </CardDescription>
                 </div>
                 <Button size="sm" onClick={() => setModalOpen(true)}>
@@ -334,7 +332,7 @@ export function Settings() {
                       <Cpu className="w-8 h-8 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">No provider profiles configured yet.</p>
                       <p className="text-xs text-zinc-500 mt-1">
-                        Add an OpenRouter, NIM, or local Ollama profile to get started.
+                        Add a profile from a server-configured provider preset to get started.
                       </p>
                     </div>
                   )}
@@ -537,7 +535,7 @@ export function Settings() {
             label="Profile Name"
             value={newProfileName}
             onChange={(e) => setNewProfileName(e.target.value)}
-            placeholder="e.g. OpenRouter LLM"
+            placeholder="e.g. Team NIM profile"
             required
           />
 
@@ -546,25 +544,18 @@ export function Settings() {
               Provider Type
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: 'openrouter', label: 'OpenRouter' },
-                { id: 'nim', label: 'NVIDIA NIM' },
-                { id: 'ollama', label: 'Local Ollama' },
-                { id: 'lmstudio', label: 'LM Studio' },
-                { id: 'llamacpp', label: 'llama.cpp' },
-                { id: 'openai_compatible', label: 'OpenAI API' },
-              ].map((t) => (
+              {Object.entries(providerPresets).map(([id, preset]) => (
                 <button
-                  key={t.id}
+                  key={id}
                   type="button"
-                  onClick={() => handleProviderTypePreset(t.id)}
+                  onClick={() => handleProviderTypePreset(id)}
                   className={`py-1.5 text-xs font-medium rounded-8 border transition-colors ${
-                    newProviderType === t.id
+                    newProviderType === id
                       ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300'
                       : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 text-zinc-600'
                   }`}
                 >
-                  {t.label}
+                  {preset.name}
                 </button>
               ))}
             </div>
@@ -574,7 +565,7 @@ export function Settings() {
             label="Base URL"
             value={newBaseUrl}
             onChange={(e) => setNewBaseUrl(e.target.value)}
-            placeholder="https://openrouter.ai/api/v1"
+            placeholder="Loaded from the selected server preset"
             className="font-mono text-xs"
             required
           />
@@ -583,7 +574,7 @@ export function Settings() {
             label="Default Model"
             value={newModel}
             onChange={(e) => setNewModel(e.target.value)}
-            placeholder="e.g. openai/gpt-4o-mini"
+            placeholder="Loaded from the selected server preset"
             className="font-mono text-xs"
             required
           />
@@ -593,7 +584,7 @@ export function Settings() {
             type="password"
             value={newApiKey}
             onChange={(e) => setNewApiKey(e.target.value)}
-            placeholder="sk-or-... (Stored encrypted server-side)"
+            placeholder="Stored encrypted server-side"
             className="font-mono text-xs"
           />
 

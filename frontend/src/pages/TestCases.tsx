@@ -28,7 +28,6 @@ export function TestCases() {
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['functional', 'edge', 'malformed', 'security'])
   const [promptVersion, setPromptVersion] = useState('v1')
-  const [customModel, setCustomModel] = useState(localStorage.getItem('ai_default_model') || '')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [testCaseToDelete, setTestCaseToDelete] = useState<string | null>(null)
 
@@ -38,19 +37,11 @@ export function TestCases() {
 
   const handleGenerate = async () => {
     try {
-      const aiProvider = localStorage.getItem('ai_primary_provider') || undefined
-      const openRouterKey = localStorage.getItem('openrouter_api_key') || undefined
-      const nimKey = localStorage.getItem('nim_api_key') || undefined
-      const selectedModel = customModel.trim() || localStorage.getItem('ai_default_model') || undefined
-
       await generateMutation.mutateAsync({
         specId: specId!,
         data: {
           categories: selectedCategories,
           prompt_version: promptVersion,
-          model: selectedModel,
-          provider: aiProvider,
-          api_key: aiProvider === 'nim' ? nimKey : openRouterKey,
         },
       })
       toast.success('Test generation started')
@@ -221,15 +212,9 @@ export function TestCases() {
               )
             })}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">AI Model</label>
-            <Input
-              value={customModel}
-              onChange={(e) => setCustomModel(e.target.value)}
-              placeholder="e.g. meta-llama/llama-3.3-70b-instruct:free (or leave as configured)"
-              helperText="Specify the AI model to use for generating these tests (e.g. any free model on OpenRouter)"
-            />
-          </div>
+          <p className="rounded-12 bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-900/70 dark:text-slate-300">
+            Generation uses the server-configured provider and model. Credentials and model choices are never stored in this browser.
+          </p>
           <div>
             <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">Prompt Version</label>
             <Input value={promptVersion} onChange={(e) => setPromptVersion(e.target.value)} placeholder="v1" />

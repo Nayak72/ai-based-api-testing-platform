@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class AssertionSchema(BaseModel):
@@ -37,12 +37,10 @@ class TestCaseMetadataSchema(BaseModel):
 
 class TestCaseGenerateRequest(BaseModel):
     __test__ = False
+    model_config = ConfigDict(extra="forbid")
     categories: list[str] | None = None
     prompt_version: str = "v1"
     dry_run: bool = False
-    model: str | None = None
-    provider: str | None = None
-    api_key: str | None = None
 
 
 class TestCaseResponse(BaseModel):

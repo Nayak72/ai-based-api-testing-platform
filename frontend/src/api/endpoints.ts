@@ -187,9 +187,6 @@ export const testCasesApi = {
     categories?: string[]
     prompt_version?: string
     dry_run?: boolean
-    model?: string
-    provider?: string
-    api_key?: string
   }) => api.post(`/specs/${specId}/test-cases/generate`, data),
   list: (specId: string, params?: { endpoint_id?: string; category?: string; page?: number; page_size?: number }) =>
     api.get<{ test_cases: TestCase[]; total: number; page: number; page_size: number }>(`/specs/${specId}/test-cases`, { params }),
@@ -240,6 +237,13 @@ export interface ProvidersListResponse {
   providers: ProviderProfile[]
 }
 
+export interface ProviderPreset {
+  name: string
+  default_base_url: string
+  default_model: string
+  requires_key: boolean
+}
+
 export const providersApi = {
   list: () => api.get<ProvidersListResponse>('/providers'),
   create: (data: { name: string; provider_type: string; base_url: string; default_model: string; api_key?: string }) =>
@@ -248,7 +252,7 @@ export const providersApi = {
     api.patch<ProviderProfile>(`/providers/${id}`, data),
   delete: (id: string) => api.delete(`/providers/${id}`),
   test: (id: string) => api.post<{ ok: boolean; message: string; latency_ms?: number }>(`/providers/${id}/test`),
-  presets: () => api.get<Record<string, any>>('/providers/presets'),
+  presets: () => api.get<{ presets: Record<string, ProviderPreset> }>('/providers/presets'),
   ollamaModels: (baseUrl?: string) => api.get<{ models: string[] }>('/providers/ollama/models', { params: { base_url: baseUrl } }),
 }
 

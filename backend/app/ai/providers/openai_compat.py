@@ -255,41 +255,28 @@ def make_llamacpp_provider(
     )
 
 
-PROVIDER_PRESETS = {
-    "openrouter": {
-        "name": "OpenRouter",
-        "default_base_url": "https://openrouter.ai/api/v1",
-        "requires_key": True,
-        "example_models": [],
-    },
-    "nim": {
-        "name": "NVIDIA NIM",
-        "default_base_url": "https://integrate.api.nvidia.com/v1",
-        "requires_key": True,
-        "example_models": [],
-    },
-    "openai_compatible": {
-        "name": "Custom OpenAI-Compatible",
-        "default_base_url": "https://api.openai.com/v1",
-        "requires_key": True,
-        "example_models": [],
-    },
-    "ollama": {
-        "name": "Ollama (Local)",
-        "default_base_url": "http://localhost:11434/v1",
-        "requires_key": False,
-        "example_models": [],
-    },
-    "lmstudio": {
-        "name": "LM Studio (Local)",
-        "default_base_url": "http://localhost:1234/v1",
-        "requires_key": False,
-        "example_models": [],
-    },
-    "llamacpp": {
-        "name": "llama.cpp Server (Local)",
-        "default_base_url": "http://localhost:8080/v1",
-        "requires_key": False,
-        "example_models": [],
-    },
-}
+def get_provider_presets() -> dict[str, dict[str, str | bool]]:
+    """Expose non-secret provider defaults from the validated runtime config."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    return {
+        "nim": {
+            "name": "NVIDIA NIM",
+            "default_base_url": settings.nim_base_url,
+            "default_model": settings.nim_default_model,
+            "requires_key": True,
+        },
+        "openrouter": {
+            "name": "OpenRouter",
+            "default_base_url": settings.openrouter_base_url,
+            "default_model": settings.openrouter_default_model,
+            "requires_key": True,
+        },
+        "ollama": {
+            "name": "Ollama (Local)",
+            "default_base_url": settings.local_llm_base_url,
+            "default_model": settings.local_llm_model,
+            "requires_key": False,
+        },
+    }
