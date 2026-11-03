@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     # RAG / Vector Store
     vector_dir: str = "./data/chroma"
     embedding_provider: str = "sentence_transformers"
-    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = ""
 
     # Agentic Mode
     agentic_mode: bool = False

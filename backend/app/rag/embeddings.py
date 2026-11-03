@@ -47,7 +47,7 @@ class OpenAICompatEmbedder(Embedder):
 class SentenceTransformerEmbedder(Embedder):
     """Local embedder — no external calls. Lazy-loads the model on first use."""
 
-    def __init__(self, model: str = "all-MiniLM-L6-v2") -> None:
+    def __init__(self, model: str) -> None:
         self.model_name = model
         self._model = None
 

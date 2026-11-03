@@ -88,7 +88,9 @@ class IngestAgent(BaseAgent):
 
                 chunks = chunk_spec(spec.parsed_spec, spec_id)
                 store = ChromaStore(path=getattr(settings, "vector_dir", "./data/chroma"))
-                embedder = SentenceTransformerEmbedder(getattr(settings, "embedding_model", "all-MiniLM-L6-v2"))
+                if not settings.embedding_model:
+                    raise ValueError("EMBEDDING_MODEL must be configured to enable spec vector indexing")
+                embedder = SentenceTransformerEmbedder(settings.embedding_model)
 
                 texts = [c["text"] for c in chunks]
                 embeddings = await embedder.embed(texts)
