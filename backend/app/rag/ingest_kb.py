@@ -36,8 +36,13 @@ async def ingest_kb(vector_dir: str = "./data/chroma") -> None:
         logger.error("Missing dependency for RAG ingest", error=str(e))
         sys.exit(1)
 
+    from app.config import get_settings
+
+    model_name = get_settings().embedding_model
+    if not model_name:
+        raise ValueError("EMBEDDING_MODEL must be configured to index the knowledge base")
     store = ChromaStore(path=vector_dir)
-    embedder = SentenceTransformerEmbedder()
+    embedder = SentenceTransformerEmbedder(model_name)
 
     ingested = skipped = 0
 

@@ -79,6 +79,9 @@ class StageTracker:
     async def start(self, stage: str, total: int | None = None) -> None:
         progress = {"done": 0, "total": total or 0, "failed": 0}
         now = datetime.now(UTC)
+        # close() runs whenever no stage is active; reopen so the heartbeat loop
+        # keeps running for the next stage instead of exiting immediately.
+        self._closed = False
         await self._write_and_publish(
             {
                 "$set": {

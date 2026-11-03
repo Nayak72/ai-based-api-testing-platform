@@ -27,10 +27,10 @@ async def kb_status(_user_id: CurrentUserId):
         from app.rag.store import ChromaStore
 
         settings = get_settings()
-        store = ChromaStore(persist_directory=settings.vector_dir)
-        owasp = store.get_or_create("owasp_kb").count()
-        http_kb = store.get_or_create("http_kb").count()
-        spec_chunks = store.get_or_create("spec_chunks").count()
+        store = ChromaStore(path=settings.vector_dir)
+        owasp = await store.count("owasp_kb")
+        http_kb = await store.count("http_kb")
+        spec_chunks = await store.count("spec_chunks")
         return KBStatus(
             owasp_count=owasp,
             http_kb_count=http_kb,
@@ -50,7 +50,7 @@ async def reindex_kb(background_tasks: BackgroundTasks, _user_id: CurrentUserId)
         try:
             from app.rag.ingest_kb import ingest_kb
 
-            await ingest_kb()
+            await ingest_kb(get_settings().vector_dir)
             logger.info("KB re-index complete")
         except Exception as e:
             logger.error("KB re-index failed", error=str(e))
@@ -68,19 +68,33 @@ async def search_kb(
 ):
     """Search the knowledge base."""
     try:
+        from app.rag.embeddings import SentenceTransformerEmbedder
         from app.rag.retriever import Retriever
+        from app.rag.store import ChromaStore
 
         settings = get_settings()
+        if not settings.embedding_model:
+            raise ValueError("EMBEDDING_MODEL must be configured to search the knowledge base")
         retriever = Retriever(
-            vector_dir=settings.vector_dir,
-            embedding_provider=settings.embedding_provider,
-            embedding_model=settings.embedding_model,
+            store=ChromaStore(path=settings.vector_dir),
+            embedder=SentenceTransformerEmbedder(settings.embedding_model),
         )
-        results = await retriever.retrieve(
+        chunks = await retriever.retrieve(
             query=q,
-            spec_id=spec_id,
-            top_k=limit,
+            collections=["owasp_kb", "http_kb", "spec_chunks"],
+            filters={"spec_id": spec_id} if spec_id else None,
+            k=limit,
         )
+        results = [
+            {
+                "id": c.id,
+                "collection": c.collection,
+                "text": c.text,
+                "score": c.score,
+                "metadata": c.metadata,
+            }
+            for c in chunks
+        ]
         return {"results": results, "query": q}
     except Exception as e:
         logger.warning("KB search failed", error=str(e))

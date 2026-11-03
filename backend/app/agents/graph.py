@@ -142,6 +142,7 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
     spec_id = state.get("spec_id", "")
     user_id = state.get("user_id", "")
     mode = state.get("mode", "local")
+    tracker = StageTracker(session_id)
 
     try:
         # Generation is idempotent through the generation cache/upsert layer. Always
@@ -175,7 +176,6 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
         )
         gen._session_mode = mode
         gen._session_intensity = state.get("intensity", "standard")
-        tracker = StageTracker(session_id)
         await tracker.start("generate")
 
         async def report_generation(category: str, status: str, message: str, metrics: dict | None = None) -> None:
@@ -282,6 +282,7 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
             )
 
         # Execute run
+        await tracker.start("execute")
         await publish(
             AgentEvent(
                 session_id=session_id,
@@ -291,12 +292,21 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
                 message="Executing test suite...",
             )
         )
+
+        async def report_execution(done: int, total: int, counts: dict) -> None:
+            # Assertion failures are findings, not stage failures; only transport
+            # errors and blocked requests count against the stage.
+            await tracker.progress("execute", done, counts.get("errors", 0) + counts.get("blocked", 0), total)
+
         orchestrator = RunOrchestrator()
-        await orchestrator.execute_run(state["run_id"], user_id)
+        await orchestrator.execute_run(state["run_id"], user_id, progress_callback=report_execution)
         run = await run_repository.get_by_id(ObjectId(state["run_id"]), ObjectId(user_id))
         if not run or run.status in ("failed", "cancelled"):
             raise RuntimeError("Test execution did not complete successfully")
         final_status = "completed_with_errors" if run.status == "completed_with_errors" else "completed"
+        summary = run.summary
+        await tracker.progress("execute", summary.total, summary.errors + summary.blocked, summary.total)
+        await tracker.finish("execute", final_status)
         await publish(
             AgentEvent(
                 session_id=session_id,
@@ -307,9 +317,18 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
             )
         )
 
-        # Triage and Report
-        state = await TriageAgent().run(state)
-        state = await ReporterAgent().run(state)
+        # Triage and Report. The agents swallow their own exceptions into
+        # state["errors"], so detect failure by comparing the error count.
+        for stage_name, agent in ("triage", TriageAgent()), ("report", ReporterAgent()):
+            await tracker.start(stage_name)
+            errors_before = len(state.get("errors", []))
+            state = await agent.run(state)
+            new_errors = state.get("errors", [])[errors_before:]
+            if new_errors:
+                await tracker.finish(stage_name, "failed", "; ".join(new_errors))
+                final_status = "completed_with_errors"
+            else:
+                await tracker.finish(stage_name, "completed")
 
         # Mark session completed
         session_update = await get_collection("sessions").update_one(
@@ -333,6 +352,16 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
     except Exception as e:
         logger.exception("Pipeline resume failed", error=str(e))
         state.setdefault("errors", []).append(str(e))
+        # Don't leave the in-flight stage showing "running" on a failed session.
+        try:
+            doc = await get_collection("sessions").find_one(
+                {"_id": ObjectId(session_id)}, {"current_stage": 1, "stages": 1}
+            )
+            stage_name = (doc or {}).get("current_stage")
+            if stage_name and (doc or {}).get("stages", {}).get(stage_name, {}).get("status") == "running":
+                await tracker.finish(stage_name, "failed", str(e))
+        except Exception:
+            logger.exception("Unable to mark failed stage")
         await get_collection("sessions").update_one(
             {"_id": ObjectId(session_id), "status": {"$ne": "cancelled"}},
             {"$set": {"status": "failed", "error": str(e)}},

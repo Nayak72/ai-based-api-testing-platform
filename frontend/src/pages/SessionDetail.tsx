@@ -69,7 +69,9 @@ export function SessionDetail() {
       }
       if (event.step === 'session_done' || event.step === 'session_error' || event.step === 'session_cancelled') {
         fetchSession()
-        toast.success('Session completed successfully!')
+        if (event.step === 'session_done') toast.success('Session completed successfully!')
+        else if (event.step === 'session_error') toast.error(event.message || 'Session failed')
+        else toast('Session cancelled')
       }
     },
   })
