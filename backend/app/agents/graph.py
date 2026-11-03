@@ -65,6 +65,58 @@ async def run_agentic_pipeline(state: SessionState) -> SessionState:
             )
             return state
 
+        # Validate both configured routes before creating an approval gate. A plan
+        # should not authorize a run whose primary and fallback models are invalid.
+        from app.ai import create_orchestrator
+        from app.ai.providers.base import GenerationRequest
+        ai = create_orchestrator()
+        provider_health = {}
+        try:
+            for provider in ai.providers:
+                model_check = await provider.validate_model()
+                canary = None
+                if model_check.get("ok"):
+                    try:
+                        response = await provider.generate(
+                            GenerationRequest(
+                                prompt="Reply with OK.",
+                                max_tokens=1,
+                                response_format="text",
+                            )
+                        )
+                        canary = {"ok": bool(response.content.strip()), "latency_ms": response.latency_ms}
+                    except Exception as exc:
+                        canary = {"ok": False, "error": str(exc)}
+                provider_health[provider.name.value] = {
+                    **model_check,
+                    "canary": canary,
+                    "ok": bool(model_check.get("ok") and canary and canary.get("ok")),
+                }
+        finally:
+            await ai.close()
+        state["provider_health"] = provider_health
+        if not all(item.get("ok") for item in provider_health.values()):
+            failures = [
+                f"{name}: {item.get('error') or (item.get('canary') or {}).get('error') or 'unhealthy'}"
+                for name, item in provider_health.items()
+                if not item.get("ok")
+            ]
+            await get_collection("sessions").update_one(
+                {"_id": ObjectId(session_id)},
+                {"$set": {"provider_health": provider_health, "status": "failed", "error": "; ".join(failures)}},
+            )
+            await publish(
+                AgentEvent(
+                    session_id=session_id,
+                    agent="orchestrator",
+                    step="session_error",
+                    status="failed",
+                    message="Provider preflight failed: " + "; ".join(failures),
+                    data={"provider_health": provider_health},
+                )
+            )
+            return state
+
         # Update session with plan and waiting_human=True
         await get_collection("sessions").update_one(
             {"_id": ObjectId(session_id), "status": {"$ne": "cancelled"}},
@@ -73,13 +125,14 @@ async def run_agentic_pipeline(state: SessionState) -> SessionState:
                     "status": "waiting_approval",
                     "waiting_human": True,
                     "plan": state.get("plan"),
+                    "provider_health": provider_health,
                 }
             },
         )
         return state
 
     except Exception as e:
-        logger.exception("Agentic pipeline failed in ingest/plan phase", error=str(e))
+        logger.exception("Agentic pipeline failed in ingest/plan phase", error=type(e).__name__)
         state.setdefault("errors", []).append(str(e))
         await get_collection("sessions").update_one(
             {"_id": ObjectId(session_id), "status": {"$ne": "cancelled"}},

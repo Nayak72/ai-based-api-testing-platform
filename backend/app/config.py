@@ -73,7 +73,8 @@ class Settings(BaseSettings):
     provider_circuit_failures: int = 3
     provider_circuit_cooldown_seconds: float = 30.0
     max_tests_per_call: int = 20
-    generation_concurrency: int = 4
+    generation_concurrency: int = 3
+    unit_deadline_seconds: float = 120.0
     min_generation_coverage: float = 0.8
 
     # Test Execution

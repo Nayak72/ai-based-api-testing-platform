@@ -149,8 +149,8 @@ class OpenAICompatProvider(AIProvider):
         exc_str = str(exc)
         exc_type = type(exc).__name__
         status = getattr(exc, "status_code", None)
-        if status in (401, 403) or exc_type in {"AuthenticationError", "PermissionDeniedError"}:
-            raise ProviderError(provider=self.name, code="auth_error", message=str(exc))
+        if status in (400, 401, 402, 403, 404) or exc_type in {"AuthenticationError", "PermissionDeniedError"}:
+            raise ProviderError(provider=self.name, code="config_error", message=str(exc))
         if status == 429 or exc_type == "RateLimitError":
             raise ProviderError(provider=self.name, code="rate_limit", message=str(exc))
         if "Timeout" in exc_type or exc_type in {"APITimeoutError", "ConnectTimeout"}:
@@ -160,6 +160,30 @@ class OpenAICompatProvider(AIProvider):
         if exc_type in {"BadRequestError", "UnprocessableEntityError"} and "response_format" in exc_str.lower():
             raise ProviderError(provider=self.name, code="unsupported_response_format", message=str(exc))
         raise ProviderError(provider=self.name, code="unknown_error", message=str(exc))
+
+    async def validate_model(self) -> dict[str, object]:
+        """Check provider reachability and whether its model catalog includes this model."""
+        import httpx
+
+        headers = {**self._extra_headers}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        try:
+            async with httpx.AsyncClient(timeout=min(self._timeout, 15.0)) as client:
+                response = await client.get(f"{self._base_url}/models", headers=headers)
+            if response.status_code >= 400:
+                return {
+                    "ok": False,
+                    "model": self._default_model,
+                    "error": f"Provider model catalog returned HTTP {response.status_code}: {response.text[:300]}",
+                }
+            payload = response.json()
+            model_ids = {item.get("id") for item in payload.get("data", []) if isinstance(item, dict)}
+            if self._default_model not in model_ids:
+                return {"ok": False, "model": self._default_model, "error": f"Provider model ID invalid: {self._default_model}"}
+            return {"ok": True, "model": self._default_model}
+        except Exception as exc:
+            return {"ok": False, "model": self._default_model, "error": f"Model validation failed: {type(exc).__name__}: {exc}"}
 
     async def health_check(self) -> bool:
         try:

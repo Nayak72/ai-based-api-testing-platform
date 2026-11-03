@@ -65,16 +65,19 @@ class AIOrchestrator:
             for attempt in range(self.max_retries + 1):
                 try:
                     response = await provider.generate(request)
+                    # A successful transport response proves provider availability;
+                    # malformed generated content belongs to the validator counter.
+                    self._circuits[provider.name]["failures"] = 0
                     if validator is not None:
                         validated = validator(response)
                         return response, validated
-                    self._circuits[provider.name]["failures"] = 0
                     return response
                 except ProviderError as e:
                     last_error = e
                     if e.code == "unsupported_response_format" and request.response_format:
                         request.response_format = "text"
                         logger.info("Retrying without response format", provider=provider.name.value)
+                        attempt -= 1
                         continue
                     logger.warning(
                         "Provider attempt failed",
@@ -83,10 +86,9 @@ class AIOrchestrator:
                         error_code=e.code,
                         message=e.message,
                     )
-                    retryable = e.code in {
-                        "rate_limit", "server_error", "timeout", "empty_response", "truncated", "invalid_output"
-                    }
-                    if retryable:
+                    breaker_failure = e.code in {"rate_limit", "server_error", "timeout"}
+                    retryable = breaker_failure or e.code in {"empty_response", "truncated", "invalid_output"}
+                    if breaker_failure:
                         self._record_failure(provider)
                     if not retryable or attempt >= self.max_retries:
                         break
@@ -94,7 +96,6 @@ class AIOrchestrator:
                     await asyncio.sleep(delay)
                 except Exception as e:
                     last_error = ProviderError(provider.name, "invalid_output", str(e))
-                    self._record_failure(provider)
                     logger.warning("Provider response validation failed", provider=provider.name.value, error=str(e))
                     if attempt >= self.max_retries:
                         break

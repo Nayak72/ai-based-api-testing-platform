@@ -65,3 +65,28 @@ async def test_validator_failure_is_not_reported_as_success():
 
     assert response.provider == ProviderName.NVIDIA_NIM
     assert parsed == [response.content]
+
+
+@pytest.mark.asyncio
+async def test_success_resets_provider_breaker_before_validation():
+    primary = FakeProvider(ProviderName.NVIDIA_NIM, ["timeout"])
+    fallback = FakeProvider(ProviderName.OPENROUTER)
+    orchestrator = AIOrchestrator(primary, fallback, max_retries_per_provider=1)
+    orchestrator._failure_threshold = 1
+
+    response = await orchestrator.generate(GenerationRequest(prompt="test"))
+
+    assert response.provider == ProviderName.NVIDIA_NIM
+    assert orchestrator._circuits[ProviderName.NVIDIA_NIM]["failures"] == 0
+
+
+@pytest.mark.asyncio
+async def test_config_error_does_not_count_toward_provider_breaker():
+    primary = FakeProvider(ProviderName.NVIDIA_NIM, ["config_error"])
+    fallback = FakeProvider(ProviderName.OPENROUTER)
+    orchestrator = AIOrchestrator(primary, fallback, max_retries_per_provider=0)
+
+    response = await orchestrator.generate(GenerationRequest(prompt="test"))
+
+    assert response.provider == ProviderName.OPENROUTER
+    assert orchestrator._circuits[ProviderName.NVIDIA_NIM]["failures"] == 0

@@ -41,6 +41,24 @@ async def list_presets():
     return {"presets": get_provider_presets()}
 
 
+@router.get("/validate")
+async def validate_configured_providers():
+    """Validate configured provider model IDs before a session is approved."""
+    from app.ai.orchestrator import create_orchestrator
+
+    orchestrator = create_orchestrator()
+    try:
+        results = {}
+        for provider in orchestrator.providers:
+            validate_model = getattr(provider, "validate_model", None)
+            results[provider.name.value] = (
+                await validate_model() if validate_model else {"ok": await provider.health_check()}
+            )
+        return {"providers": results, "ok": all(item.get("ok") for item in results.values())}
+    finally:
+        await orchestrator.close()
+
+
 @router.get("/ollama/models")
 async def list_ollama_models(base_url: str = Query("http://localhost:11434")):
     """List models installed in a local Ollama instance."""
@@ -68,6 +86,18 @@ async def list_providers(user_id: CurrentUserId):
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_provider(body: ProviderProfileCreate, user_id: CurrentUserId):
     _validate_provider_url(body.base_url, body.preset.value)
+    from app.ai.providers.openai_compat import OpenAICompatProvider
+    validator = OpenAICompatProvider(
+        name=body.preset.value,
+        base_url=body.base_url,
+        api_key=body.api_key,
+        default_model=body.model,
+        capabilities=body.capabilities,
+    )
+    validation = await validator.validate_model()
+    await validator.close()
+    if not validation.get("ok"):
+        raise HTTPException(status_code=422, detail=validation.get("error", "Provider model validation failed"))
     profile = await provider_repository.create(body, ObjectId(user_id))
     return _safe_profile(profile)
 
@@ -83,6 +113,21 @@ async def update_provider(profile_id: str, body: ProviderProfileUpdate, user_id:
         raise HTTPException(status_code=404, detail="Provider profile not found")
     if body.base_url:
         _validate_provider_url(body.base_url, existing.preset.value)
+    new_url = body.base_url or existing.base_url
+    new_model = body.model or existing.model
+    new_key = body.api_key or (provider_repository.get_decrypted_key(existing) if existing.has_key else None)
+    from app.ai.providers.openai_compat import OpenAICompatProvider
+    validator = OpenAICompatProvider(
+        name=existing.preset.value,
+        base_url=new_url,
+        api_key=new_key,
+        default_model=new_model,
+        capabilities=body.capabilities or existing.capabilities,
+    )
+    validation = await validator.validate_model()
+    await validator.close()
+    if not validation.get("ok"):
+        raise HTTPException(status_code=422, detail=validation.get("error", "Provider model validation failed"))
     profile = await provider_repository.update(obj_id, ObjectId(user_id), body)
     if not profile:
         raise HTTPException(status_code=404, detail="Provider profile not found")
