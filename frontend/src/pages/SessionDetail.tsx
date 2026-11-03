@@ -19,12 +19,12 @@ import {
 import toast from 'react-hot-toast'
 
 const AGENT_STEPS = [
-  { id: 'ingest', name: 'Ingest & Index', desc: 'Parses OpenAPI spec and indexes RAG vector chunks' },
-  { id: 'planner', name: 'Test Planner', desc: 'Generates endpoint coverage strategy and awaits approval' },
-  { id: 'generator', name: 'Test Generator', desc: 'Synthesizes targeted test payloads with schema validation' },
-  { id: 'executor', name: 'Execution Engine', desc: 'Dispatches requests with rate limits and assertion checks' },
-  { id: 'triage', name: 'Triage Agent', desc: 'Classifies true bugs vs false positives with OWASP Top 10' },
-  { id: 'reporter', name: 'Reporter Agent', desc: 'Generates HTML and PDF executive vulnerability reports' },
+  { id: 'ingest', stage: 'ingest', name: 'Ingest & Index', desc: 'Parses OpenAPI spec and indexes RAG vector chunks' },
+  { id: 'planner', stage: 'plan', name: 'Test Planner', desc: 'Generates endpoint coverage strategy and awaits approval' },
+  { id: 'generator', stage: 'generate', name: 'Test Generator', desc: 'Synthesizes targeted test payloads with schema validation' },
+  { id: 'executor', stage: 'execute', name: 'Execution Engine', desc: 'Dispatches requests with rate limits and assertion checks' },
+  { id: 'triage', stage: 'triage', name: 'Triage Agent', desc: 'Classifies true bugs vs false positives with OWASP Top 10' },
+  { id: 'reporter', stage: 'report', name: 'Reporter Agent', desc: 'Generates HTML and PDF executive vulnerability reports' },
 ]
 
 export function SessionDetail() {
@@ -33,19 +33,20 @@ export function SessionDetail() {
   const sessionStatus = session?.status
   const [planModalOpen, setPlanModalOpen] = useState(false)
   const [approving, setApproving] = useState(false)
+  const [dismissedVersion, setDismissedVersion] = useState<number | null>(null)
 
   const fetchSession = useCallback(async () => {
     if (!id) return
     try {
       const res = await sessionsApi.get(id)
       setSession(res.data)
-      if (res.data.status === 'waiting_approval' || res.data.waiting_human) {
+      if ((res.data.status === 'waiting_approval' || res.data.waiting_human) && dismissedVersion !== res.data.plan_version) {
         setPlanModalOpen(true)
       }
     } catch {
       toast.error('Failed to load session')
     }
-  }, [id])
+  }, [id, dismissedVersion])
 
   useEffect(() => {
     fetchSession()
@@ -64,7 +65,7 @@ export function SessionDetail() {
       if (event.status === 'waiting_human') {
         fetchSession()
       }
-      if (event.step === 'session_done') {
+      if (event.step === 'session_done' || event.step === 'session_error' || event.step === 'session_cancelled') {
         fetchSession()
         toast.success('Session completed successfully!')
       }
@@ -75,9 +76,10 @@ export function SessionDetail() {
     if (!id) return
     setApproving(true)
     try {
-      await sessionsApi.approvePlan(id, approved)
+      await sessionsApi.approvePlan(id, approved, session?.plan_version ?? 0)
       toast.success(approved ? 'Plan approved! Resuming execution...' : 'Plan rejected.')
       setPlanModalOpen(false)
+      setDismissedVersion(session?.plan_version ?? 0)
       fetchSession()
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Approval failed')
@@ -106,8 +108,6 @@ export function SessionDetail() {
     }
   }
 
-  // Active step inference
-  const currentAgent = events[events.length - 1]?.agent || 'planner'
   const totalTokens = events.reduce((acc, ev) => acc + (ev.tokens || 0), 0)
   const totalLatency = events.reduce((acc, ev) => acc + (ev.latency_ms || 0), 0)
 
@@ -235,12 +235,14 @@ export function SessionDetail() {
 
           <div className="space-y-2">
             {AGENT_STEPS.map((s, idx) => {
-              const agentEvents = events.filter((e) => e.agent === s.id)
-              const hasFailed = agentEvents.some((e) => e.status === 'failed')
-              const isCompleted = agentEvents.some((e) => e.status === 'completed')
-              const isWaiting = agentEvents.some((e) => e.status === 'waiting_human')
-              const isStarted = agentEvents.some((e) => e.status === 'started' || e.status === 'progress')
-              const isCurrent = currentAgent === s.id && session?.status === 'running'
+              const stage = session?.stages?.[s.stage]
+              const stageStatus = stage?.status || 'pending'
+              const hasFailed = stageStatus === 'failed'
+              const isCompleted = stageStatus === 'completed' || stageStatus === 'skipped'
+              const isWaiting = stageStatus === 'waiting'
+              const isCurrent = stageStatus === 'running'
+              const progress = stage?.progress
+              const progressPct = progress?.total ? Math.min(100, Math.round(progress.done / progress.total * 100)) : 0
 
               return (
                 <Card
@@ -250,6 +252,8 @@ export function SessionDetail() {
                       ? 'border-red-300 bg-red-50/40 dark:bg-red-950/30 shadow-sm'
                       : isCurrent
                       ? 'border-brand-600 bg-brand-50/40 dark:bg-brand-950/30 shadow-sm'
+                      : stageStatus === 'completed_with_errors'
+                      ? 'border-amber-300 bg-amber-50/40 dark:bg-amber-950/30 shadow-sm'
                       : isCompleted
                       ? 'border-zinc-200 dark:border-zinc-800'
                       : 'border-zinc-100 dark:border-zinc-800/50 opacity-60'
@@ -274,7 +278,9 @@ export function SessionDetail() {
                         <WarningCircle className="w-3.5 h-3.5" />
                         Awaiting Approval
                       </span>
-                    ) : isCurrent || isStarted ? (
+                    ) : stageStatus === 'completed_with_errors' ? (
+                      <span className="text-amber-600 text-xs font-bold">{progress?.failed || 0} of {progress?.total || 0} failed</span>
+                    ) : isCurrent ? (
                       <span className="text-brand-600 text-xs font-bold flex items-center gap-1">
                         <Lightning className="w-3.5 h-3.5 animate-pulse" />
                         Active
@@ -284,6 +290,18 @@ export function SessionDetail() {
                     )}
                   </div>
                   <p className="text-[11px] text-zinc-500 mt-1">{s.desc}</p>
+                  {isCurrent && progress?.total ? (
+                    <div className="mt-2">
+                      <div className="h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                        <div className="h-full bg-brand-600 transition-all" style={{ width: `${progressPct}%` }} />
+                      </div>
+                      <p className="mt-1 text-[10px] text-zinc-500">{progress.done}/{progress.total} complete · {progress.failed} failed</p>
+                    </div>
+                  ) : null}
+                  {hasFailed && stage?.error ? <p className="mt-1 text-[11px] text-red-600">{stage.error}</p> : null}
+                  {isWaiting && s.stage === 'plan' ? (
+                    <Button size="sm" className="mt-2" onClick={() => setPlanModalOpen(true)}>Review plan</Button>
+                  ) : null}
                 </Card>
               )
             })}
@@ -367,7 +385,7 @@ export function SessionDetail() {
       {/* Plan Review Modal */}
       <Modal
         isOpen={planModalOpen}
-        onClose={() => setPlanModalOpen(false)}
+        onClose={() => { setPlanModalOpen(false); setDismissedVersion(session?.plan_version ?? 0) }}
         title="Approve Test Plan Strategy"
         description="Review planned test categories and endpoint coverage before execution begins."
         size="lg"
@@ -408,14 +426,14 @@ export function SessionDetail() {
               disabled={approving}
             >
               <ThumbsDown className="w-4 h-4" />
-              <span>Cancel Session</span>
+              <span>Reject plan</span>
             </Button>
             <Button
               onClick={() => handleApprovePlan(true)}
               loading={approving}
             >
               <ThumbsUp className="w-4 h-4" />
-              <span>Approve & Execute</span>
+              <span>Approve & run</span>
             </Button>
           </div>
         </div>

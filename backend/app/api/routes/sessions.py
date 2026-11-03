@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.agents.events import AgentEvent, subscribe, unsubscribe
 from app.agents.graph import resume_after_plan_approval, run_agentic_pipeline
+from app.agents.stages import StageTracker, emit_terminal, initial_stages
 from app.agents.state import SessionState
 from app.api.deps import CurrentUser, CurrentUserId
 from app.api.ids import parse_object_id
@@ -70,6 +71,7 @@ class PlanApproval(BaseModel):
     model_config = ConfigDict(extra="forbid")
     approved: bool
     modified_plan: list[dict] | None = None
+    plan_version: int
 
 
 class AuthProvision(BaseModel):
@@ -118,6 +120,10 @@ async def create_session(
         "user_id": user_id,
         "name": body.name,
         "status": "pending",
+        "current_stage": "ingest",
+        "heartbeat_at": now,
+        "plan_version": 0,
+        "stages": initial_stages(),
         "mode": body.mode,
         "base_url": effective_base_url,
         "auth_type": body.auth_type,
@@ -297,14 +303,46 @@ async def approve_plan(
         raise HTTPException(status_code=404, detail="Session not found")
     if not doc.get("waiting_human") or doc.get("status") != "waiting_approval":
         raise HTTPException(status_code=409, detail="Session is not waiting for human input")
+    if body.plan_version != doc.get("plan_version", 0):
+        raise HTTPException(status_code=409, detail="Plan version is stale; reload the session before approving")
+
+    approved_plan = body.modified_plan or (doc.get("plan") or {}).get("endpoints", [])
+    if body.approved and body.modified_plan is not None:
+        spec = await spec_repository.get_by_id(doc["spec_id"], user_id)
+        from app.parsers import extract_endpoints
+
+        valid_ids = {ep["endpoint_id"] for ep in extract_endpoints(spec.parsed_spec)}
+        allowed_categories = set(doc.get("categories", []))
+        if any(
+            unit.get("endpoint_id") not in valid_ids
+            or not isinstance(unit.get("categories"), list)
+            or not set(unit["categories"]).issubset(allowed_categories)
+            for unit in approved_plan
+        ):
+            raise HTTPException(status_code=422, detail="Modified plan contains unknown endpoints or categories")
+        approved_plan = [
+            {
+                **(old := next((item for item in (doc.get("plan") or {}).get("endpoints", []) if item.get("endpoint_id") == unit.get("endpoint_id")), {})),
+                **unit,
+                "categories": unit.get("categories", old.get("categories", [])),
+            }
+            for unit in approved_plan
+        ]
 
     update = await get_collection("sessions").update_one(
-        {"_id": session_obj_id, "user_id": user_id, "waiting_human": True, "status": "waiting_approval"},
+        {
+            "_id": session_obj_id,
+            "user_id": user_id,
+            "waiting_human": True,
+            "status": "waiting_approval",
+            "plan_version": body.plan_version,
+        },
         {
             "$set": {
                 "waiting_human": False,
                 "plan_approved": body.approved,
                 "status": "running" if body.approved else "cancelled",
+                "plan.endpoints": approved_plan,
             }
         },
     )
@@ -312,6 +350,8 @@ async def approve_plan(
         raise HTTPException(status_code=409, detail="Session approval was already processed")
 
     if body.approved:
+        tracker = StageTracker(session_id)
+        await tracker.finish("plan", "completed")
         state: SessionState = {
             "session_id": session_id,
             "spec_id": str(doc["spec_id"]),
@@ -322,7 +362,7 @@ async def approve_plan(
             "intensity": doc.get("intensity", "standard"),
             "owned_host_attestation": doc.get("owned_host_attestation", False),
             "routing": {"provider_profile_id": str(doc["provider_profile_id"])} if doc.get("provider_profile_id") else {},
-            "plan": {"endpoints": body.modified_plan} if body.modified_plan else doc.get("plan"),
+            "plan": {**(doc.get("plan") or {}), "endpoints": approved_plan},
             "test_cases": [],
             "results": [],
             "errors": [],
@@ -330,6 +370,10 @@ async def approve_plan(
             "human_input": {"plan_approved": True},
         }
         background_tasks.add_task(resume_after_plan_approval, state)
+    else:
+        tracker = StageTracker(session_id)
+        await tracker.finish("plan", "cancelled")
+        await emit_terminal(session_id, "session_cancelled", "Plan rejected; session cancelled")
 
     return {"status": "ok", "approved": body.approved}
 
@@ -373,4 +417,9 @@ async def cancel_session(session_id: str, user_id: CurrentUserId):
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Session not found or not cancellable")
+    session = await get_collection("sessions").find_one({"_id": session_obj_id}, {"current_stage": 1})
+    stage = (session or {}).get("current_stage")
+    if stage:
+        await StageTracker(session_id).finish(stage, "cancelled")
+    await emit_terminal(session_id, "session_cancelled", "Session cancelled by user")
     return {"status": "cancelled"}

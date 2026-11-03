@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 import structlog
@@ -22,7 +22,7 @@ class AgentEvent:
     step: str
     status: Literal["started", "progress", "completed", "completed_with_errors", "failed", "waiting_human"]
     message: str
-    ts: str = field(default_factory=lambda: datetime.now().isoformat())
+    ts: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     data: Any = None
     tokens: int = 0
     latency_ms: int = 0
@@ -32,6 +32,7 @@ class AgentEvent:
     rag_sources: list[dict] = field(default_factory=list)
     repairs_used: int = 0
     event_id: str | None = None
+    type: Literal["stage_update", "log"] = "log"
 
     def to_dict(self) -> dict:
         return {
@@ -50,6 +51,7 @@ class AgentEvent:
             "rag_sources": self.rag_sources,
             "repairs_used": self.repairs_used,
             "event_id": self.event_id,
+            "type": self.type,
         }
 
 

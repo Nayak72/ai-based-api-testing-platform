@@ -14,6 +14,7 @@ from bson import ObjectId
 
 from app.agents.events import AgentEvent, publish
 from app.agents.state import SessionState
+from app.agents.stages import StageTracker, emit_terminal
 
 logger = structlog.get_logger()
 
@@ -28,41 +29,23 @@ async def run_agentic_pipeline(state: SessionState) -> SessionState:
     from app.db.mongo import get_collection
 
     session_id = state.get("session_id", "")
+    tracker = StageTracker(session_id)
     try:
+        await tracker.start("ingest")
         state = await IngestAgent().run(state)
         if state.get("errors"):
             err_msg = "; ".join(state["errors"])
-            await get_collection("sessions").update_one(
-                {"_id": ObjectId(session_id)},
-                {"$set": {"status": "failed", "error": err_msg}},
-            )
-            await publish(
-                AgentEvent(
-                    session_id=session_id,
-                    agent="orchestrator",
-                    step="session_error",
-                    status="failed",
-                    message=f"Pipeline error: {err_msg}",
-                )
-            )
+            await tracker.finish("ingest", "failed", err_msg)
+            await emit_terminal(session_id, "session_error", f"Pipeline error: {err_msg}", error=err_msg)
             return state
 
+        await tracker.finish("ingest", "completed")
+        await tracker.start("plan")
         state = await PlannerAgent().run(state)
         if state.get("errors"):
             err_msg = "; ".join(state["errors"])
-            await get_collection("sessions").update_one(
-                {"_id": ObjectId(session_id)},
-                {"$set": {"status": "failed", "error": err_msg}},
-            )
-            await publish(
-                AgentEvent(
-                    session_id=session_id,
-                    agent="orchestrator",
-                    step="session_error",
-                    status="failed",
-                    message=f"Pipeline error: {err_msg}",
-                )
-            )
+            await tracker.finish("plan", "failed", err_msg)
+            await emit_terminal(session_id, "session_error", f"Pipeline error: {err_msg}", error=err_msg)
             return state
 
         # Validate both configured routes before creating an approval gate. A plan
@@ -118,15 +101,12 @@ async def run_agentic_pipeline(state: SessionState) -> SessionState:
             return state
 
         # Update session with plan and waiting_human=True
-        await get_collection("sessions").update_one(
-            {"_id": ObjectId(session_id), "status": {"$ne": "cancelled"}},
+        await tracker.wait(
+            "plan",
             {
-                "$set": {
-                    "status": "waiting_approval",
-                    "waiting_human": True,
-                    "plan": state.get("plan"),
-                    "provider_health": provider_health,
-                }
+                "plan": state.get("plan"),
+                "provider_health": provider_health,
+                "waiting_reason": "plan_approval",
             },
         )
         return state
@@ -134,19 +114,10 @@ async def run_agentic_pipeline(state: SessionState) -> SessionState:
     except Exception as e:
         logger.exception("Agentic pipeline failed in ingest/plan phase", error=type(e).__name__)
         state.setdefault("errors", []).append(str(e))
-        await get_collection("sessions").update_one(
-            {"_id": ObjectId(session_id), "status": {"$ne": "cancelled"}},
-            {"$set": {"status": "failed", "error": str(e)}},
-        )
-        await publish(
-            AgentEvent(
-                session_id=session_id,
-                agent="orchestrator",
-                step="session_error",
-                status="failed",
-                message=f"Pipeline error: {e}",
-            )
-        )
+        session = await get_collection("sessions").find_one({"_id": ObjectId(session_id)}, {"current_stage": 1})
+        stage = (session or {}).get("current_stage", "ingest")
+        await tracker.finish(stage, "failed", str(e))
+        await emit_terminal(session_id, "session_error", f"Pipeline error: {e}", error=str(e))
         return state
 
 

@@ -281,6 +281,18 @@ export interface Session {
   user_id: string
   name: string
   status: 'pending' | 'waiting_approval' | 'running' | 'completed' | 'completed_with_errors' | 'failed' | 'cancelled'
+  current_stage?: 'ingest' | 'plan' | 'generate' | 'execute' | 'triage' | 'report'
+  heartbeat_at?: string
+  plan_version: number
+  waiting_reason?: string | null
+  stages?: Record<string, {
+    status: 'pending' | 'running' | 'waiting' | 'completed' | 'completed_with_errors' | 'failed' | 'skipped' | 'cancelled'
+    started_at?: string | null
+    finished_at?: string | null
+    progress?: { done: number; total: number; failed: number; passed?: number; errors?: number }
+    error?: string | null
+  }>
+  provider_health?: Record<string, { ok: boolean; error?: string; model?: string; canary?: { ok: boolean; error?: string; latency_ms?: number } }>
   mode: 'local' | 'online'
   base_url?: string
   auth_type?: string
@@ -306,6 +318,8 @@ export interface Session {
 }
 
 export interface AgentEvent {
+  type: 'stage_update' | 'log'
+  event_id?: string
   session_id: string
   agent: string
   step: string
@@ -341,8 +355,8 @@ export const sessionsApi = {
   list: (params?: { page?: number; page_size?: number }) =>
     api.get<{ sessions: Session[]; total: number; page: number; page_size: number }>('/sessions', { params }),
   get: (sessionId: string) => api.get<Session>(`/sessions/${sessionId}`),
-  approvePlan: (sessionId: string, approved: boolean, modified_plan?: any[]) =>
-    api.post(`/sessions/${sessionId}/approve-plan`, { approved, modified_plan }),
+  approvePlan: (sessionId: string, approved: boolean, plan_version: number, modified_plan?: any[]) =>
+    api.post(`/sessions/${sessionId}/approve-plan`, { approved, plan_version, modified_plan }),
   provideAuth: (sessionId: string, token: string) =>
     api.post(`/sessions/${sessionId}/provide-auth`, { token }),
   cancel: (sessionId: string) => api.post(`/sessions/${sessionId}/cancel`),
