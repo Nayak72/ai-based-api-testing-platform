@@ -3,7 +3,7 @@ Operation: {{ endpoint.operation | tojson(indent=2) }}
 
 Security Requirements: {{ endpoint.operation.security | tojson if endpoint.operation.security else spec.security | tojson if spec.security else "none" }}
 
-Generate malformed/negative test cases. Cover:
+Generate malformed/negative test cases. {% if subcategory != "all" %}Focus only on subcategory {{ subcategory }}.{% else %}Cover:{% endif %}
 1. Missing required parameters/headers
 2. Wrong types (string instead of integer, etc.)
 3. Invalid enum values

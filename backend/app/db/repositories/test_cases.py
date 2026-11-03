@@ -25,6 +25,8 @@ class TestCaseRepository:
             "subcategory": doc["subcategory"],
             "metadata.request_hash": request_hash,
         }
+        if doc.get("session_id"):
+            filter_query["session_id"] = doc["session_id"]
         result = await self.collection.find_one_and_update(
             filter_query,
             {"$set": doc, "$setOnInsert": {"created_at": doc.get("created_at")}},
@@ -49,6 +51,8 @@ class TestCaseRepository:
                 "subcategory": doc["subcategory"],
                 "metadata.request_hash": request_hash,
             }
+            if doc.get("session_id"):
+                filter_query["session_id"] = doc["session_id"]
             operations.append(
                 UpdateOne(
                     filter_query,
@@ -77,6 +81,17 @@ class TestCaseRepository:
         if category:
             query["category"] = category
         cursor = self.collection.find(query).sort("created_at", 1).skip(skip).limit(limit)
+        return [TestCaseInDB(**doc) async for doc in cursor]
+
+    async def list_by_session(
+        self, session_id: str, limit: int = 10000, endpoint_id: str | None = None, category: str | None = None
+    ) -> list[TestCaseInDB]:
+        query = {"session_id": session_id}
+        if endpoint_id:
+            query["endpoint_id"] = endpoint_id
+        if category:
+            query["category"] = category
+        cursor = self.collection.find(query).sort("created_at", 1).limit(limit)
         return [TestCaseInDB(**doc) async for doc in cursor]
 
     async def count_by_spec(

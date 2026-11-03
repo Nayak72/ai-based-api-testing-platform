@@ -1,32 +1,27 @@
+from __future__ import annotations
+
+import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 
 import structlog
+from bson import ObjectId
 
 from app.ai import create_orchestrator
-from app.generators.functional import (
-    EdgeGenerator,
-    FunctionalGenerator,
-    MalformedGenerator,
-    SecurityGenerator,
-)
+from app.config import get_settings
+from app.db.mongo import get_collection
+from app.db.repositories import generation_unit_repository
+from app.generators.functional import EdgeGenerator, FunctionalGenerator, MalformedGenerator, SecurityGenerator
 from app.parsers import extract_endpoints
 
 logger = structlog.get_logger()
 
 
 class GenerationOrchestrator:
-    def __init__(
-        self,
-        primary_provider: str | None = None,
-        model: str | None = None,
-        api_key: str | None = None,
-    ):
+    def __init__(self, primary_provider: str | None = None, model: str | None = None, api_key: str | None = None):
         self.model = model
-        self.ai_orchestrator = create_orchestrator(
-            primary_provider=primary_provider,
-            model=model,
-            api_key=api_key,
-        )
+        self.settings = get_settings()
+        self.ai_orchestrator = create_orchestrator(primary_provider=primary_provider, model=model, api_key=api_key)
         self.generators = {
             "functional": FunctionalGenerator(self.ai_orchestrator),
             "edge": EdgeGenerator(self.ai_orchestrator),
@@ -42,74 +37,187 @@ class GenerationOrchestrator:
         prompt_version: str = "v1",
         dry_run: bool = False,
         model: str | None = None,
-        progress_callback: Callable[[str, str, str], Awaitable[None]] | None = None,
+        progress_callback: Callable[..., Awaitable[None]] | None = None,
         plan: dict | None = None,
-    ):
-        from bson import ObjectId
-
+        session_id: str | None = None,
+        only_failed: bool = False,
+        cancel_token=None,
+    ) -> dict:
         from app.db.repositories import spec_repository, test_case_repository
 
-        target_model = model or self.model
-
-        spec = await spec_repository.get_by_id(ObjectId(spec_id), ObjectId(user_id))
+        spec_obj_id = ObjectId(spec_id)
+        spec = await spec_repository.get_by_id(spec_obj_id, ObjectId(user_id))
         if not spec or not spec.parsed_spec:
-            logger.error("Spec not found or not parsed", spec_id=spec_id)
-            return
-
+            raise ValueError("Spec not found or not parsed")
         endpoints = extract_endpoints(spec.parsed_spec)
-        planned_units = {
-            unit.get("endpoint_id"): set(unit.get("categories") or categories)
-            for unit in (plan or {}).get("endpoints", [])
-            if unit.get("endpoint_id")
-        }
-        logger.info(
-            "Starting generation", spec_id=spec_id, endpoints=len(endpoints), categories=categories, model=target_model
-        )
-        generated_count = 0
-        failed_count = 0
+        endpoint_by_id = {ep["endpoint_id"]: ep for ep in endpoints}
+        plan_units = (plan or {}).get("endpoints", [])
+        if plan is not None:
+            requested = [(item["endpoint_id"], category) for item in plan_units for category in item.get("categories", [])]
+        else:
+            requested = [(endpoint["endpoint_id"], category) for endpoint in endpoints for category in categories]
+        requested = [(ep_id, category) for ep_id, category in requested if ep_id in endpoint_by_id and category in self.generators]
 
-        for endpoint in endpoints:
-            for category in categories:
-                if planned_units and category not in planned_units.get(endpoint["endpoint_id"], set()):
-                    continue
-                if category not in self.generators:
-                    continue
-                generator = self.generators[category]
-                generator.PROMPT_VERSION = prompt_version
+        units = []
+        for endpoint_id, category in requested:
+            generator = self.generators[category]
+            plan_item = next((item for item in plan_units if item.get("endpoint_id") == endpoint_id), {})
+            planned_subcats = plan_item.get("subcategories") or []
+            subcategories = planned_subcats or (generator.SUBCATEGORIES if (session_id and self._intensity(session_id) == "aggressive") else ["all"])
+            for subcategory in subcategories:
+                unit = None
+                if session_id:
+                    unit = await generation_unit_repository.ensure(
+                        session_id=session_id,
+                        spec_id=spec_obj_id,
+                        endpoint_id=endpoint_id,
+                        category=category,
+                        subcategory=subcategory,
+                    )
+                units.append((endpoint_by_id[endpoint_id], category, subcategory, unit))
 
-                try:
-                    if progress_callback:
-                        await progress_callback(category, "started", f"Generating {category} tests for {endpoint['endpoint_id']}...")
-                    test_cases = await generator.generate_for_endpoint(
-                        spec_id=ObjectId(spec_id),
+        total = len(units)
+        if not total:
+            raise ValueError("Approved plan contains no supported generation units")
+        done = failed = tokens = 0
+        errors: list[str] = []
+        semaphore = asyncio.Semaphore(max(1, min(self.settings.generation_concurrency, self.settings.online_max_concurrency if self._mode(session_id) == "online" else self.settings.generation_concurrency)))
+        progress_lock = asyncio.Lock()
+
+        async def report(category: str, status: str, message: str, metrics: dict | None = None) -> None:
+            if progress_callback:
+                await progress_callback(category, status, message, metrics or {})
+
+        async def generate_one(endpoint: dict, category: str, subcategory: str, unit: dict | None) -> None:
+            nonlocal done, failed, tokens
+            unit_id = str(unit["_id"]) if unit else None
+            if unit and unit.get("status") == "done" and not only_failed:
+                async with progress_lock:
+                    done += 1
+                    await report(category, "progress", f"Skipped completed unit {endpoint['endpoint_id']} · {category}", {"done": done, "failed": failed, "total": total})
+                return
+            if only_failed and unit and unit.get("status") not in {"failed", "pending"}:
+                async with progress_lock:
+                    done += 1
+                    await report(category, "progress", f"Skipped unit {endpoint['endpoint_id']} · {category}", {"done": done, "failed": failed, "total": total})
+                return
+            if cancel_token and await cancel_token.cancelled():
+                if unit:
+                    await generation_unit_repository.finish(ObjectId(unit_id), status="cancelled", error="Session cancelled")
+                raise asyncio.CancelledError
+
+            generator = self.generators[category]
+            started = datetime.now(UTC)
+            if unit:
+                await generation_unit_repository.start(ObjectId(unit_id))
+            await report(category, "progress", f"Generating {category}/{subcategory}: {endpoint['endpoint_id']}", {"done": done, "failed": failed, "total": total})
+            async with semaphore:
+                call_task = asyncio.create_task(
+                    generator.generate_for_endpoint(
+                        spec_id=spec_obj_id,
                         endpoint=endpoint,
                         spec=spec.parsed_spec,
-                        subcategory=generator.SUBCATEGORIES[0],
-                        model=target_model,
+                        subcategory=subcategory,
+                        model=model or self.model,
+                        prompt_version=prompt_version,
                     )
-
+                )
+                cancel_task = asyncio.create_task(cancel_token.wait()) if cancel_token else None
+                try:
+                    async with asyncio.timeout(self.settings.unit_deadline_seconds):
+                        wait_set = {call_task}
+                        if cancel_task:
+                            wait_set.add(cancel_task)
+                        finished, _ = await asyncio.wait(wait_set, return_when=asyncio.FIRST_COMPLETED)
+                        if cancel_task and cancel_task in finished:
+                            call_task.cancel()
+                            await asyncio.gather(call_task, return_exceptions=True)
+                            if unit:
+                                await generation_unit_repository.finish(ObjectId(unit_id), status="cancelled", error="Session cancelled")
+                            raise asyncio.CancelledError
+                        test_cases = await call_task
+                    if subcategory != "all":
+                        for testcase in test_cases:
+                            testcase.subcategory = subcategory
+                    test_cases = test_cases[: self.settings.max_tests_per_call]
+                    for testcase in test_cases:
+                        testcase.session_id = session_id
+                        testcase.unit_id = unit_id
                     if not dry_run and test_cases:
                         await test_case_repository.bulk_upsert(test_cases)
-                        logger.info("Test cases saved", count=len(test_cases), category=category)
-                    generated_count += len(test_cases)
-                    if progress_callback:
-                        await progress_callback(category, "completed", f"Generated {len(test_cases)} {category} tests for {endpoint['endpoint_id']}")
+                    persisted_cases = await test_case_repository.list_by_session(
+                        session_id, endpoint_id=endpoint["endpoint_id"], category=category
+                    ) if session_id else []
+                    response_tokens = test_cases[0].metadata.tokens_used if test_cases else 0
+                    tokens += response_tokens
+                    if unit:
+                        await generation_unit_repository.finish(
+                            ObjectId(unit_id), status="done", tokens=response_tokens,
+                            test_case_ids=[str(tc.id) for tc in persisted_cases if tc.unit_id == unit_id],
+                        )
+                    elapsed = int((datetime.now(UTC) - started).total_seconds() * 1000)
+                    provider_name = test_cases[0].metadata.generated_by if test_cases else None
+                    await report(category, "progress", f"Generated {len(test_cases)} tests: {endpoint['endpoint_id']} · {category}/{subcategory}", {"provider": provider_name, "model": model or self.model, "tokens": response_tokens, "latency_ms": elapsed})
+                    async with progress_lock:
+                        done += 1
+                        await report(category, "progress", f"Generation progress {done}/{total}", {"done": done, "failed": failed, "total": total})
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    if not call_task.done():
+                        call_task.cancel()
+                        await asyncio.gather(call_task, return_exceptions=True)
+                    failed += 1
+                    error_code = getattr(exc, "code", "unit_error")
+                    error = str(exc)
+                    errors.append(f"{category}/{subcategory} {endpoint['endpoint_id']}: {error}")
+                    if unit:
+                        await generation_unit_repository.finish(ObjectId(unit_id), status="failed", error_code=error_code, error=error)
+                    async with progress_lock:
+                        done += 1
+                    await report(category, "progress", f"Unit failed: {endpoint['endpoint_id']} · {error}", {
+                        "done": done, "failed": failed, "total": total,
+                        "provider": getattr(getattr(exc, "provider", None), "value", None),
+                        "model": model or self.model,
+                        "error_code": error_code,
+                    })
+                    logger.warning("Generation unit failed", unit_id=unit_id, endpoint_id=endpoint["endpoint_id"], category=category, error=error)
+                finally:
+                    if not call_task.done():
+                        call_task.cancel()
+                        await asyncio.gather(call_task, return_exceptions=True)
+                    if cancel_task:
+                        cancel_task.cancel()
+                        await asyncio.gather(cancel_task, return_exceptions=True)
 
-                except Exception as e:
-                    failed_count += 1
-                    logger.error(
-                        "Generation failed for endpoint",
-                        endpoint_id=endpoint["endpoint_id"],
-                        category=category,
-                        error=str(e),
-                    )
-                    if progress_callback:
-                        await progress_callback(category, "failed", f"{category} generation failed for {endpoint['endpoint_id']}: {e}")
+        results = await asyncio.gather(*(generate_one(*unit) for unit in units), return_exceptions=True)
+        if any(isinstance(result, asyncio.CancelledError) for result in results):
+            raise asyncio.CancelledError
 
-        logger.info("Generation completed", spec_id=spec_id, generated=generated_count, failed=failed_count)
-        return {"generated": generated_count, "failed": failed_count}
+        # Coverage measures completed units against all approved units.
+        coverage = (total - failed) / total
+        return {
+            "total": total,
+            "done": total - failed,
+            "failed": failed,
+            "tokens": tokens,
+            "coverage": coverage,
+            "errors": errors,
+            "root_cause": errors[0] if errors else None,
+        }
+
+    def _session_value(self, session_id: str | None, key: str, fallback):
+        if not session_id:
+            return fallback
+        # Values are set on the orchestrator by the session worker, without exposing
+        # credentials or adding a second database query per unit.
+        return getattr(self, f"_session_{key}", fallback)
+
+    def _intensity(self, session_id: str | None) -> str:
+        return self._session_value(session_id, "intensity", "standard")
+
+    def _mode(self, session_id: str | None) -> str:
+        return self._session_value(session_id, "mode", "local")
 
     async def close(self) -> None:
-        for provider in self.ai_orchestrator.providers:
-            if provider and hasattr(provider, "close"):
-                await provider.close()
+        await self.ai_orchestrator.close()

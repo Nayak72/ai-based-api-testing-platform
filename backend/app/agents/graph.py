@@ -14,7 +14,8 @@ from bson import ObjectId
 
 from app.agents.events import AgentEvent, publish
 from app.agents.state import SessionState
-from app.agents.stages import StageTracker, emit_terminal
+from app.agents.stages import CancelToken, StageTracker, emit_terminal
+from app.generators.policy import coverage_decision
 
 logger = structlog.get_logger()
 
@@ -169,44 +170,86 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
             model=selected_model,
             api_key=selected_api_key,
         )
+        gen._session_mode = mode
+        gen._session_intensity = state.get("intensity", "standard")
+        tracker = StageTracker(session_id)
+        await tracker.start("generate")
 
-        async def report_generation(category: str, status: str, message: str) -> None:
-            await publish(
+        async def report_generation(category: str, status: str, message: str, metrics: dict | None = None) -> None:
+            metrics = metrics or {}
+            if "done" in metrics:
+                await tracker.progress("generate", metrics["done"], metrics.get("failed", 0), metrics.get("total", 0))
+            if message.startswith(("Generated", "Unit failed")):
+                await publish(
                     AgentEvent(
                         session_id=session_id,
                         agent="generator",
                         step="generate",
-                        status=status,
+                        status="failed" if message.startswith("Unit failed") else "progress",
                         message=message,
+                        tokens=metrics.get("tokens", 0),
+                        latency_ms=metrics.get("latency_ms", 0),
+                        provider=metrics.get("provider"),
+                        model=metrics.get("model"),
                     )
-            )
+                )
 
-        generation_result = await gen.generate_for_spec(
+        if state.get("continue_partial"):
+            from app.db.repositories import generation_unit_repository
+
+            prior_units = await generation_unit_repository.list_for_session(session_id)
+            generation_result = {
+                "total": len(prior_units),
+                "done": sum(unit.get("status") in {"done", "skipped"} for unit in prior_units),
+                "failed": sum(unit.get("status") == "failed" for unit in prior_units),
+                "coverage": sum(unit.get("status") in {"done", "skipped"} for unit in prior_units) / max(1, len(prior_units)),
+                "root_cause": None,
+            }
+        else:
+            generation_result = await gen.generate_for_spec(
                 spec_id=spec_id,
                 user_id=user_id,
                 categories=categories,
                 progress_callback=report_generation,
                 plan=state.get("plan"),
-        )
+                session_id=session_id,
+                only_failed=state.get("retry_failed_units", False),
+                cancel_token=CancelToken(session_id),
+            )
         await gen.close()
-        tc_count = await test_case_repository.count_by_spec(ObjectId(spec_id))
-        if tc_count == 0:
-            raise RuntimeError("Test generation produced no test cases")
+        tc_count = len(await test_case_repository.list_by_session(session_id))
+        decision = coverage_decision(
+            generation_result["total"], generation_result["done"], generation_result["failed"],
+            gen.settings.min_generation_coverage,
+        )
+        if decision.status == "failed":
+            root_cause = generation_result.get("root_cause") or "All planned generation units failed"
+            await tracker.finish("generate", "failed", root_cause)
+            await emit_terminal(session_id, "session_error", root_cause, error=root_cause)
+            return state
+        if decision.status == "waiting" and not state.get("continue_partial"):
+            await tracker.wait(
+                "generate",
+                {"waiting_reason": "generation_partial", "waiting_human": True},
+            )
+            return state
+        generation_status = "completed_with_errors" if generation_result["failed"] else "completed"
+        await tracker.finish("generate", generation_status)
         await publish(
                 AgentEvent(
                     session_id=session_id,
                     agent="generator",
                     step="generate",
-                    status="completed_with_errors" if generation_result and generation_result.get("failed") else "completed",
+                    status=generation_status,
                     message=(
                         f"Generated {tc_count} test cases; {generation_result['failed']} generation units failed"
-                        if generation_result and generation_result.get("failed")
+                        if generation_result.get("failed")
                         else f"Generated {tc_count} test cases"
                     ),
                 )
         )
 
-        scoped_cases = await test_case_repository.list_by_spec(ObjectId(spec_id), limit=10000)
+        scoped_cases = await test_case_repository.list_by_session(session_id, limit=10000)
         scoped_cases = [tc for tc in scoped_cases if tc.category in categories]
         test_case_ids = [str(tc.id) for tc in scoped_cases]
 
@@ -221,6 +264,7 @@ async def resume_after_plan_approval(state: SessionState) -> SessionState:
                 routing=state.get("routing") or None,
                 auth_secret_ref=session_id,
                 test_case_ids=test_case_ids,
+                session_id=session_id,
             )
             req = RunCreateRequest(
                 spec_id=spec_id,

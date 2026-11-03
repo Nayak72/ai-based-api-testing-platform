@@ -181,6 +181,23 @@ class StageTracker:
             self._heartbeat_task = None
 
 
+class CancelToken:
+    """Poll persisted cancellation state and wake active workers promptly."""
+
+    def __init__(self, session_id: str, poll_seconds: float = 1.0) -> None:
+        self.session_id = session_id
+        self._id = ObjectId(session_id)
+        self.poll_seconds = poll_seconds
+
+    async def cancelled(self) -> bool:
+        doc = await get_collection("sessions").find_one({"_id": self._id}, {"status": 1})
+        return not doc or doc.get("status") == "cancelled"
+
+    async def wait(self) -> None:
+        while not await self.cancelled():
+            await asyncio.sleep(self.poll_seconds)
+
+
 async def emit_terminal(session_id: str, outcome: str, message: str, *, error: str | None = None) -> bool:
     """Persist one terminal outcome and publish it only if no terminal was emitted."""
     collection = get_collection("sessions")

@@ -120,10 +120,10 @@ class RunOrchestrator:
         )
 
         try:
-            test_cases = await test_case_repository.list_by_spec(
-                run.spec_id,
-                category=None,
-                limit=10000,
+            test_cases = (
+                await test_case_repository.list_by_session(run.config.session_id, limit=10000)
+                if run.config.session_id
+                else await test_case_repository.list_by_spec(run.spec_id, category=None, limit=10000)
             )
 
             scoped_ids = set(run.config.test_case_ids or [])

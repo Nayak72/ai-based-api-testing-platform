@@ -74,6 +74,12 @@ class PlanApproval(BaseModel):
     plan_version: int
 
 
+class RetryStageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    stage: Literal["generate"]
+    only_failed: bool = True
+
+
 class AuthProvision(BaseModel):
     model_config = ConfigDict(extra="forbid")
     token: str
@@ -423,3 +429,77 @@ async def cancel_session(session_id: str, user_id: CurrentUserId):
         await StageTracker(session_id).finish(stage, "cancelled")
     await emit_terminal(session_id, "session_cancelled", "Session cancelled by user")
     return {"status": "cancelled"}
+
+
+def _state_from_session_doc(session_id: str, doc: dict, user_id: str, **extra) -> SessionState:
+    state: SessionState = {
+        "session_id": session_id,
+        "spec_id": str(doc["spec_id"]),
+        "user_id": str(user_id),
+        "mode": doc.get("mode", "local"),
+        "base_url": doc.get("base_url", ""),
+        "categories": doc.get("categories", ["functional", "edge", "malformed", "security"]),
+        "intensity": doc.get("intensity", "standard"),
+        "owned_host_attestation": doc.get("owned_host_attestation", False),
+        "routing": {"provider_profile_id": str(doc["provider_profile_id"])} if doc.get("provider_profile_id") else {},
+        "plan": doc.get("plan"),
+        "run_id": str(doc["run_id"]) if doc.get("run_id") else None,
+        "test_cases": [],
+        "results": [],
+        "errors": [],
+        "interrupts": [],
+        "human_input": {"plan_approved": True},
+        **extra,
+    }
+    return state
+
+
+@router.post("/{session_id}/retry-stage")
+async def retry_session_stage(
+    session_id: str,
+    body: RetryStageRequest,
+    background_tasks: BackgroundTasks,
+    user_id: CurrentUserId,
+):
+    session_obj_id = parse_object_id(session_id, "session")
+    doc = await get_collection("sessions").find_one({"_id": session_obj_id, "user_id": user_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if doc.get("waiting_reason") != "generation_partial" or doc.get("status") != "waiting_approval":
+        raise HTTPException(status_code=409, detail="Session is not waiting on partial generation")
+    update = await get_collection("sessions").update_one(
+        {"_id": session_obj_id, "user_id": user_id, "status": "waiting_approval", "waiting_reason": "generation_partial"},
+        {"$set": {"status": "running", "waiting_human": False, "waiting_reason": None}},
+    )
+    if not update.modified_count:
+        raise HTTPException(status_code=409, detail="Session state changed; reload and retry")
+    background_tasks.add_task(
+        resume_after_plan_approval,
+        _state_from_session_doc(session_id, doc, str(user_id), retry_failed_units=body.only_failed),
+    )
+    return {"status": "resuming", "stage": body.stage}
+
+
+@router.post("/{session_id}/continue-partial")
+async def continue_partial_session(
+    session_id: str,
+    background_tasks: BackgroundTasks,
+    user_id: CurrentUserId,
+):
+    session_obj_id = parse_object_id(session_id, "session")
+    doc = await get_collection("sessions").find_one({"_id": session_obj_id, "user_id": user_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if doc.get("waiting_reason") != "generation_partial" or doc.get("status") != "waiting_approval":
+        raise HTTPException(status_code=409, detail="Session is not waiting on partial generation")
+    update = await get_collection("sessions").update_one(
+        {"_id": session_obj_id, "user_id": user_id, "status": "waiting_approval", "waiting_reason": "generation_partial"},
+        {"$set": {"status": "running", "waiting_human": False, "waiting_reason": None}},
+    )
+    if not update.modified_count:
+        raise HTTPException(status_code=409, detail="Session state changed; reload and continue")
+    background_tasks.add_task(
+        resume_after_plan_approval,
+        _state_from_session_doc(session_id, doc, str(user_id), continue_partial=True),
+    )
+    return {"status": "resuming", "stage": "execute"}

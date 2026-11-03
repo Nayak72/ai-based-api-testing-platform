@@ -169,6 +169,7 @@ class GenerationCache(BaseModel):
     spec_id: PyObjectId
     endpoint_id: str
     category: str
+    subcategory: str = "all"
     prompt_version: str
     prompt_hash: str
     spec_hash: str
@@ -224,6 +225,8 @@ class TestCaseBase(BaseModel):
     spec_id: PyObjectId
     endpoint_id: str
     category: str
+    session_id: str | None = None
+    unit_id: str | None = None
     subcategory: str
     title: str
     description: str
@@ -264,6 +267,7 @@ class RunConfig(BaseModel):
     routing: dict | None = None  # LLMRouter config
     auth_secret_ref: str | None = None  # owner-scoped session holding encrypted auth material
     test_case_ids: list[str] | None = None  # immutable session/run scope
+    session_id: str | None = None
 
 
 class RunSummary(BaseModel):

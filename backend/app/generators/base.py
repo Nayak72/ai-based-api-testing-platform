@@ -47,9 +47,15 @@ class BaseGenerator(ABC):
     @abstractmethod
     def parse_response(self, content: str, endpoint_id: str, spec_id: ObjectId) -> list[TestCaseCreate]: ...
 
-    def _build_prompt(self, endpoint: dict, spec: dict) -> str:
+    def _build_prompt(self, endpoint: dict, spec: dict, subcategory: str) -> str:
         template = self.jinja_env.get_template(self.get_prompt_template_name())
-        return template.render(endpoint=endpoint, spec=spec, category=self.CATEGORY)
+        return template.render(
+            endpoint=endpoint,
+            spec=spec,
+            category=self.CATEGORY,
+            subcategory=subcategory,
+            max_tests_per_call=self.settings.max_tests_per_call,
+        ) + f"\nReturn no more than {self.settings.max_tests_per_call} test cases."
 
     def _compute_prompt_hash(self, prompt: str) -> str:
         return f"sha256:{hashlib.sha256(prompt.encode()).hexdigest()}"
@@ -165,9 +171,13 @@ class BaseGenerator(ABC):
         spec: dict,
         subcategory: str,
         model: str | None = None,
+        session_id: str | None = None,
+        unit_id: str | None = None,
+        prompt_version: str | None = None,
     ) -> list[TestCaseCreate]:
+        resolved_prompt_version = prompt_version or self.PROMPT_VERSION
         cached = await generation_cache_repository.get(
-            spec_id, endpoint["endpoint_id"], self.CATEGORY, self.PROMPT_VERSION, model
+            spec_id, endpoint["endpoint_id"], self.CATEGORY, resolved_prompt_version, model, subcategory
         )
         if cached:
             logger.info(
@@ -179,7 +189,7 @@ class BaseGenerator(ABC):
             )
             return [TestCaseCreate(**tc) for tc in cached.test_cases]
 
-        prompt = self._build_prompt(endpoint, spec)
+        prompt = self._build_prompt(endpoint, spec, subcategory)
         prompt_hash = self._compute_prompt_hash(prompt)
 
         request = GenerationRequest(
@@ -217,7 +227,8 @@ class BaseGenerator(ABC):
             spec_id=spec_id,
             endpoint_id=endpoint["endpoint_id"],
             category=self.CATEGORY,
-            prompt_version=self.PROMPT_VERSION,
+            prompt_version=resolved_prompt_version,
+            subcategory=subcategory,
             prompt_hash=prompt_hash,
             spec_hash=spec.get("spec_hash", ""),
             test_cases=[tc.model_dump() for tc in test_cases],

@@ -34,6 +34,7 @@ export function useSSE(sessionId: string | null, options: UseSSEOptions = {}) {
 
     setIsConnected(true)
     setError(null)
+    es.onopen = () => setIsConnected(true)
 
     es.onmessage = (e) => {
       try {
@@ -58,6 +59,7 @@ export function useSSE(sessionId: string | null, options: UseSSEOptions = {}) {
     es.onerror = (err) => {
       console.warn('SSE connection error or closed', err)
       setIsConnected(false)
+      setError('Reconnecting…')
       optionsRef.current.onError?.(err)
     }
 

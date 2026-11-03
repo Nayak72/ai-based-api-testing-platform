@@ -5,7 +5,7 @@ Spec Context:
 - Base URL: {{ spec.servers[0].url if spec.servers else "/" }}
 - Security Schemes: {{ spec.components.securitySchemes | tojson if spec.components and spec.components.securitySchemes else "none" }}
 
-Generate functional test cases for this endpoint. Cover:
+Generate functional test cases for this endpoint. {% if subcategory != "all" %}Focus only on subcategory {{ subcategory }}.{% else %}Cover:{% endif %}
 1. Happy path with valid required parameters
 2. Optional parameter combinations
 3. Valid enum values for parameters

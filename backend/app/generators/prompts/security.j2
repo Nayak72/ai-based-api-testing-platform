@@ -4,7 +4,7 @@ Operation: {{ endpoint.operation | tojson(indent=2) }}
 Auth Config: {{ spec.security | tojson if spec.security else "none" }}
 Security Schemes: {{ spec.components.securitySchemes | tojson if spec.components and spec.components.securitySchemes else "none" }}
 
-Generate OWASP API Top 10 2023 security test cases. Cover relevant categories for this endpoint:
+Generate OWASP API Top 10 2023 security test cases. {% if subcategory != "all" %}Focus only on subcategory {{ subcategory }}.{% else %}Cover relevant categories for this endpoint:{% endif %}
 
 1. **API1: Broken Object Level Authorization (Bola)** - IDOR probes using other users' resource IDs
 2. **API2: Broken Authentication** - Token replay, weak tokens, missing auth, auth bypass

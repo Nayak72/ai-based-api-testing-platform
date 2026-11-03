@@ -360,6 +360,9 @@ export const sessionsApi = {
   provideAuth: (sessionId: string, token: string) =>
     api.post(`/sessions/${sessionId}/provide-auth`, { token }),
   cancel: (sessionId: string) => api.post(`/sessions/${sessionId}/cancel`),
+  retryStage: (sessionId: string, stage: 'generate' = 'generate', only_failed = true) =>
+    api.post(`/sessions/${sessionId}/retry-stage`, { stage, only_failed }),
+  continuePartial: (sessionId: string) => api.post(`/sessions/${sessionId}/continue-partial`),
 }
 
 // Knowledge Base

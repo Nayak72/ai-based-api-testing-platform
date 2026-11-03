@@ -1,4 +1,5 @@
 from app.db.repositories.providers import provider_repository
+from app.db.repositories.generation_units import generation_unit_repository
 from app.db.repositories.reports import report_repository
 from app.db.repositories.results import result_repository
 from app.db.repositories.runs import run_repository
@@ -14,6 +15,7 @@ from app.db.repositories.users import user_repository
 __all__ = [
     "generation_cache_repository",
     "provider_repository",
+    "generation_unit_repository",
     "report_repository",
     "result_repository",
     "run_repository",

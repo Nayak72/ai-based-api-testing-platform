@@ -32,6 +32,7 @@ class RunConfigSchema(BaseModel):
     routing: dict | None = None
     auth_secret_ref: str | None = None
     test_case_ids: list[str] | None = None
+    session_id: str | None = None
 
 
 class RunSummarySchema(BaseModel):

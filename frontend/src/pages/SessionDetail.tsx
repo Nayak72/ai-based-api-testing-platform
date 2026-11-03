@@ -40,7 +40,9 @@ export function SessionDetail() {
     try {
       const res = await sessionsApi.get(id)
       setSession(res.data)
-      if ((res.data.status === 'waiting_approval' || res.data.waiting_human) && dismissedVersion !== res.data.plan_version) {
+      if ((res.data.status === 'waiting_approval' || res.data.waiting_human)
+        && res.data.waiting_reason !== 'generation_partial'
+        && dismissedVersion !== res.data.plan_version) {
         setPlanModalOpen(true)
       }
     } catch {
@@ -85,6 +87,18 @@ export function SessionDetail() {
       toast.error(err.response?.data?.detail || 'Approval failed')
     } finally {
       setApproving(false)
+    }
+  }
+
+  const handleGenerationAction = async (action: 'retry' | 'continue' | 'abort') => {
+    if (!id) return
+    try {
+      if (action === 'retry') await sessionsApi.retryStage(id, 'generate', true)
+      else if (action === 'continue') await sessionsApi.continuePartial(id)
+      else await sessionsApi.cancel(id)
+      await fetchSession()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Unable to update the session')
     }
   }
 
@@ -206,6 +220,19 @@ export function SessionDetail() {
 
       {/* Human Approval Interrupt Banner */}
       {(session?.waiting_human || session?.status === 'waiting_approval') && (
+        session?.waiting_reason === 'generation_partial' ? (
+          <div className="p-4 rounded-16 bg-amber-50 border-2 border-amber-400 text-amber-950 dark:bg-amber-950/40 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold">Generation completed below the coverage threshold</p>
+              <p className="text-xs mt-1">Review the failed units, retry them, continue with generated cases, or abort.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => handleGenerationAction('retry')}>Retry failed units</Button>
+              <Button size="sm" variant="secondary" onClick={() => handleGenerationAction('continue')}>Continue with partial</Button>
+              <Button size="sm" variant="secondary" onClick={() => handleGenerationAction('abort')}>Abort</Button>
+            </div>
+          </div>
+        ) : (
         <div className="p-4 rounded-16 bg-brand-50 border-2 border-brand-500 text-brand-900 dark:bg-brand-950/40 dark:text-brand-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fade-in shadow-sm">
           <div className="flex items-center gap-3">
             <WarningCircle className="w-6 h-6 text-brand-600 flex-shrink-0" />
@@ -222,6 +249,7 @@ export function SessionDetail() {
             </Button>
           </div>
         </div>
+        )
       )}
 
       {/* Main Grid: Stepper on Left, Event Stream on Right */}

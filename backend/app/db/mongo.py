@@ -57,20 +57,32 @@ async def create_indexes() -> None:
         await db.generation_cache.delete_many({"_id": None})
     except Exception:
         pass
+    old_cache_index = "spec_id_1_endpoint_id_1_category_1_prompt_version_1"
+    if old_cache_index in await db.generation_cache.index_information():
+        await db.generation_cache.drop_index(old_cache_index)
     await db.generation_cache.create_index(
-        [("spec_id", 1), ("endpoint_id", 1), ("category", 1), ("prompt_version", 1)],
+        [("spec_id", 1), ("endpoint_id", 1), ("category", 1), ("subcategory", 1), ("prompt_version", 1), ("model", 1)],
         unique=True,
     )
     await db.generation_cache.create_index("prompt_hash")
 
     # test_cases
+    old_test_case_index = "spec_id_1_endpoint_id_1_category_1_subcategory_1_metadata.request_hash_1"
+    if old_test_case_index in await db.test_cases.index_information():
+        await db.test_cases.drop_index(old_test_case_index)
     await db.test_cases.create_index([("spec_id", 1), ("endpoint_id", 1), ("category", 1)])
+    await db.test_cases.create_index([("session_id", 1), ("endpoint_id", 1), ("category", 1)])
     await db.test_cases.create_index("category")
     await db.test_cases.create_index("metadata.severity")
     await db.test_cases.create_index(
-        [("spec_id", 1), ("endpoint_id", 1), ("category", 1), ("subcategory", 1), ("metadata.request_hash", 1)],
+        [("spec_id", 1), ("session_id", 1), ("endpoint_id", 1), ("category", 1), ("subcategory", 1), ("metadata.request_hash", 1)],
         unique=True,
     )
+
+    await db.generation_units.create_index(
+        [("session_id", 1), ("endpoint_id", 1), ("category", 1), ("subcategory", 1)], unique=True
+    )
+    await db.generation_units.create_index([("session_id", 1), ("status", 1)])
 
     # test_runs
     await db.test_runs.create_index([("user_id", 1), ("created_at", -1)])

@@ -137,7 +137,8 @@ class GenerationCacheRepository:
         return self._collection
 
     async def get(
-        self, spec_id: ObjectId, endpoint_id: str, category: str, prompt_version: str, model: str | None = None
+        self, spec_id: ObjectId, endpoint_id: str, category: str, prompt_version: str, model: str | None = None,
+        subcategory: str = "all",
     ) -> GenerationCache | None:
         spec_ids = [spec_id, str(spec_id)]
         if ObjectId.is_valid(str(spec_id)):
@@ -147,6 +148,7 @@ class GenerationCacheRepository:
             "endpoint_id": endpoint_id,
             "category": category,
             "prompt_version": prompt_version,
+            "subcategory": {"$in": [subcategory, None]} if subcategory == "all" else subcategory,
         }
         if model:
             query["model"] = model
@@ -167,6 +169,8 @@ class GenerationCacheRepository:
             "endpoint_id": cache.endpoint_id,
             "category": cache.category,
             "prompt_version": cache.prompt_version,
+            "subcategory": cache.subcategory,
+            "model": cache.model,
         })
 
         if existing:
@@ -183,6 +187,8 @@ class GenerationCacheRepository:
                     "endpoint_id": cache.endpoint_id,
                     "category": cache.category,
                     "prompt_version": cache.prompt_version,
+                    "subcategory": cache.subcategory,
+                    "model": cache.model,
                 },
                 {"$set": doc},
                 upsert=True,
@@ -194,6 +200,8 @@ class GenerationCacheRepository:
                     "endpoint_id": cache.endpoint_id,
                     "category": cache.category,
                     "prompt_version": cache.prompt_version,
+                    "subcategory": cache.subcategory,
+                    "model": cache.model,
                 })
                 await self.collection.update_one(
                     {
@@ -201,6 +209,8 @@ class GenerationCacheRepository:
                         "endpoint_id": cache.endpoint_id,
                         "category": cache.category,
                         "prompt_version": cache.prompt_version,
+                    "subcategory": cache.subcategory,
+                    "model": cache.model,
                     },
                     {"$set": doc},
                     upsert=True,

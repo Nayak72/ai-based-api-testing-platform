@@ -2,6 +2,7 @@ import pytest
 
 from app.ai.orchestrator import AIOrchestrator
 from app.ai.providers.base import AIProvider, GenerationRequest, GenerationResponse, ProviderError, ProviderName
+from app.generators.policy import coverage_decision
 
 
 class FakeProvider(AIProvider):
@@ -90,3 +91,14 @@ async def test_config_error_does_not_count_toward_provider_breaker():
 
     assert response.provider == ProviderName.OPENROUTER
     assert orchestrator._circuits[ProviderName.NVIDIA_NIM]["failures"] == 0
+
+
+def test_partial_coverage_policy_continues_when_above_threshold():
+    decision = coverage_decision(total=8, succeeded=7, failed=1, threshold=0.8)
+    assert decision.coverage == 0.875
+    assert decision.status == "completed_with_errors"
+
+
+def test_partial_coverage_policy_waits_below_threshold():
+    decision = coverage_decision(total=8, succeeded=6, failed=2, threshold=0.8)
+    assert decision.status == "waiting"
