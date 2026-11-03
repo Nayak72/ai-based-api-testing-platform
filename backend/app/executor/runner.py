@@ -48,7 +48,7 @@ class RunOrchestrator:
     def __init__(self):
         self.active_runs: dict[str, RunContext] = {}
 
-    async def execute_run(self, run_id: str, user_id: str):
+    async def execute_run(self, run_id: str, user_id: str, *, cancel_token=None, progress_callback=None):
         run_obj_id = ObjectId(run_id)
         user_obj_id = ObjectId(user_id)
 
@@ -131,6 +131,11 @@ class RunOrchestrator:
                 tc for tc in test_cases
                 if tc.category in run.config.categories and (not scoped_ids or str(tc.id) in scoped_ids)
             ]
+            # A resumed run reuses durable results and dispatches only cases that
+            # have not already produced a result.
+            existing = await result_repository.list_by_run(run_obj_id, limit=10000)
+            completed_case_ids = {str(result.test_case_id) for result in existing}
+            filtered_cases = [tc for tc in filtered_cases if str(tc.id) not in completed_case_ids]
             if len(filtered_cases) > run.config.max_total_requests:
                 # Preserve category coverage when enforcing the request budget.
                 by_category = {category: [] for category in run.config.categories}
@@ -152,16 +157,19 @@ class RunOrchestrator:
 
             tasks = []
             for tc in filtered_cases:
-                if context.is_cancelled():
+                if context.is_cancelled() or (cancel_token and await cancel_token.cancelled()):
+                    await context.cancel_all()
                     break
                 task = asyncio.create_task(self._execute_single(executor, context, tc))
                 context.add_task(str(tc.id), task)
                 tasks.append(task)
 
             passed = failed = errors = skipped = blocked = 0
+            done = 0
 
             for task in asyncio.as_completed(tasks):
-                if context.is_cancelled():
+                if context.is_cancelled() or (cancel_token and await cancel_token.cancelled()):
+                    await context.cancel_all()
                     break
                 try:
                     result = await task
@@ -169,6 +177,7 @@ class RunOrchestrator:
 
                     # Persist each result immediately
                     await result_repository.create(result)
+                    done += 1
 
                     # Update summary counters atomically
                     if result.status == "passed":
@@ -186,6 +195,8 @@ class RunOrchestrator:
                     elif result.status == "blocked":
                         blocked += 1
                         await run_repository.increment_summary(run_obj_id, "blocked", 1)
+                    if progress_callback:
+                        await progress_callback(done, len(filtered_cases), {"passed": passed, "failed": failed, "errors": errors, "skipped": skipped, "blocked": blocked})
 
                 except Exception as e:
                     logger.error("Test execution exception", error=str(e))
@@ -193,10 +204,11 @@ class RunOrchestrator:
                     await run_repository.increment_summary(run_obj_id, "errors", 1)
 
             total = passed + failed + errors + skipped + blocked
-            await run_repository.increment_summary(run_obj_id, "total", total)
+            if total:
+                await run_repository.increment_summary(run_obj_id, "total", total)
 
             final_status = (
-                "cancelled" if context.is_cancelled() else ("completed_with_errors" if errors > 0 else "completed")
+                "cancelled" if context.is_cancelled() or (cancel_token and await cancel_token.cancelled()) else ("completed_with_errors" if errors > 0 else "completed")
             )
             await run_repository.update_status(run_obj_id, final_status)
             await run_repository.update_completed_at(run_obj_id)

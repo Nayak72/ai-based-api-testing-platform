@@ -36,7 +36,7 @@ class ReporterAgent(BaseAgent):
                 state,
                 "report",
                 "completed",
-                "Report generated (HTML + PDF)",
+                "Report generated; HTML is available (PDF may be unavailable)",
                 data={"run_id": run_id},
             )
             return state

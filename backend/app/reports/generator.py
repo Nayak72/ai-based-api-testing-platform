@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
@@ -43,10 +44,16 @@ class ReportGenerator:
 
         if format in ("pdf", "both"):
             if html_path:
-                pdf_path = await self._generate_pdf(html_path, run)
+                try:
+                    pdf_path = await asyncio.to_thread(self._generate_pdf_sync, html_path, run)
+                except Exception as exc:
+                    logger.warning("PDF generation failed; retaining HTML report", error=type(exc).__name__)
             else:
                 html_path = await self._generate_html(run, results, spec)
-                pdf_path = await self._generate_pdf(html_path, run)
+                try:
+                    pdf_path = await asyncio.to_thread(self._generate_pdf_sync, html_path, run)
+                except Exception as exc:
+                    logger.warning("PDF generation failed; retaining HTML report", error=type(exc).__name__)
 
         file_size = 0
         if html_path and Path(html_path).exists():
@@ -105,7 +112,7 @@ class ReportGenerator:
         filepath.write_text(html, encoding="utf-8")
         return str(filepath)
 
-    async def _generate_pdf(self, html_path: str, run: TestRunInDB) -> str:
+    def _generate_pdf_sync(self, html_path: str, run: TestRunInDB) -> str:
         try:
             from weasyprint import CSS, HTML
         except (ImportError, OSError) as e:

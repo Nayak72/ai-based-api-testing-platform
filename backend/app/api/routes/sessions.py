@@ -16,7 +16,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.agents.events import AgentEvent, subscribe, unsubscribe
-from app.agents.graph import resume_after_plan_approval, run_agentic_pipeline
+from app.agents.pipeline import PipelineRunner
 from app.agents.stages import StageTracker, emit_terminal, initial_stages
 from app.agents.state import SessionState
 from app.api.deps import CurrentUser, CurrentUserId
@@ -166,7 +166,7 @@ async def create_session(
         "human_input": {},
     }
 
-    background_tasks.add_task(run_agentic_pipeline, state)
+    background_tasks.add_task(PipelineRunner.run, session_id)
     return {"session_id": session_id, "id": session_id, "status": "pending"}
 
 
@@ -375,7 +375,7 @@ async def approve_plan(
             "interrupts": [],
             "human_input": {"plan_approved": True},
         }
-        background_tasks.add_task(resume_after_plan_approval, state)
+        background_tasks.add_task(PipelineRunner.run, session_id, "generate")
     else:
         tracker = StageTracker(session_id)
         await tracker.finish("plan", "cancelled")
@@ -474,8 +474,7 @@ async def retry_session_stage(
     if not update.modified_count:
         raise HTTPException(status_code=409, detail="Session state changed; reload and retry")
     background_tasks.add_task(
-        resume_after_plan_approval,
-        _state_from_session_doc(session_id, doc, str(user_id), retry_failed_units=body.only_failed),
+        PipelineRunner.run, session_id, "generate", retry_failed_units=body.only_failed
     )
     return {"status": "resuming", "stage": body.stage}
 
@@ -498,8 +497,5 @@ async def continue_partial_session(
     )
     if not update.modified_count:
         raise HTTPException(status_code=409, detail="Session state changed; reload and continue")
-    background_tasks.add_task(
-        resume_after_plan_approval,
-        _state_from_session_doc(session_id, doc, str(user_id), continue_partial=True),
-    )
+    background_tasks.add_task(PipelineRunner.run, session_id, "generate", continue_partial=True)
     return {"status": "resuming", "stage": "execute"}

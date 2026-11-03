@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     max_tests_per_call: int = 20
     generation_concurrency: int = 3
     unit_deadline_seconds: float = 120.0
+    resume_sessions_on_startup: bool = True
+    triage_max_tokens_per_session: int = 12000
     min_generation_coverage: float = 0.8
 
     # Test Execution

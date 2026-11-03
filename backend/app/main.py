@@ -29,6 +29,10 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up...")
     await connect_to_mongo()
     await create_indexes()
+    from app.agents.pipeline import recover_stale_sessions
+
+    recovered = await recover_stale_sessions()
+    logger.info("Scheduled stale session recovery", sessions=recovered)
     yield
     logger.info("Shutting down...")
     await close_mongo_connection()
