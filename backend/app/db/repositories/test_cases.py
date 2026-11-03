@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
 
@@ -29,7 +31,7 @@ class TestCaseRepository:
             filter_query["session_id"] = doc["session_id"]
         result = await self.collection.find_one_and_update(
             filter_query,
-            {"$set": doc, "$setOnInsert": {"created_at": doc.get("created_at")}},
+            {"$set": doc, "$setOnInsert": {"created_at": datetime.now()}},
             upsert=True,
             return_document=True,
         )
@@ -56,7 +58,7 @@ class TestCaseRepository:
             operations.append(
                 UpdateOne(
                     filter_query,
-                    {"$set": doc, "$setOnInsert": {"created_at": doc.get("created_at")}},
+                    {"$set": doc, "$setOnInsert": {"created_at": datetime.now()}},
                     upsert=True,
                 )
             )

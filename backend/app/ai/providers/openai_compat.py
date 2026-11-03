@@ -44,8 +44,11 @@ class OpenAICompatProvider(AIProvider):
         capabilities: ModelCapabilities | None = None,
         extra_headers: dict[str, str] | None = None,
         timeout: float | None = None,
+        extra_body: dict | None = None,
     ) -> None:
         self._name = name
+        # Provider-specific request fields, e.g. to disable hidden reasoning tokens.
+        self._extra_body = extra_body or {}
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._default_model = default_model
@@ -103,6 +106,8 @@ class OpenAICompatProvider(AIProvider):
 
         if self._capabilities.json_mode and request.response_format == "json_object":
             kwargs["response_format"] = {"type": "json_object"}
+        if self._extra_body:
+            kwargs["extra_body"] = self._extra_body
 
         start = time.perf_counter()
         try:
@@ -120,13 +125,14 @@ class OpenAICompatProvider(AIProvider):
             content = reasoning
         finish_reason = getattr(choice, "finish_reason", None)
         if finish_reason == "length":
-            raise ProviderError(self.name, "truncated", "Provider stopped at the output token limit")
-        if not content.strip():
+            if not request.allow_truncated:
+                raise ProviderError(self.name, "truncated", "Provider stopped at the output token limit")
+        elif not content.strip():
             raise ProviderError(self.name, "empty_response", "Provider returned HTTP 200 with empty content")
-        if "<think>" in content:
+        if "<think>" in content and finish_reason != "length":
             import re
             content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
-        if not content:
+        if not content and finish_reason != "length":
             raise ProviderError(self.name, "empty_response", "Provider returned reasoning without a usable answer")
         usage = response.usage
         tokens_used = usage.total_tokens if usage else 0
@@ -213,6 +219,11 @@ class OpenAICompatProvider(AIProvider):
 
 # ── Preset factories ──────────────────────────────────────────────────────────
 
+# Nemotron-style reasoning models spend most of max_tokens on hidden thinking
+# (~80% in testing), which truncates structured JSON output. Disable it.
+NIM_NO_REASONING_BODY = {"chat_template_kwargs": {"enable_thinking": False}}
+OPENROUTER_NO_REASONING_BODY = {"reasoning": {"enabled": False}}
+
 
 def make_openrouter_provider(
     api_key: str | None = None,
@@ -228,6 +239,8 @@ def make_openrouter_provider(
         api_key=api_key or settings.openrouter_api_key,
         default_model=model or settings.openrouter_default_model,
         capabilities=ModelCapabilities(json_mode=True, tools=True, context_window=200000),
+        # Reasoning tokens count against max_tokens and truncate long JSON outputs.
+        extra_body=OPENROUTER_NO_REASONING_BODY,
         extra_headers={
             "HTTP-Referer": settings.openrouter_site_url,
             "X-Title": settings.openrouter_site_name,
@@ -249,6 +262,7 @@ def make_nim_provider(
         api_key=api_key or settings.nim_api_key,
         default_model=model or settings.nim_default_model,
         capabilities=ModelCapabilities(json_mode=True, tools=False, context_window=32768),
+        extra_body=NIM_NO_REASONING_BODY,
     )
 
 

@@ -25,4 +25,5 @@ class NIMProvider(OpenAICompatProvider):
             default_model=preset._default_model,
             capabilities=preset._capabilities,
             extra_headers=preset._extra_headers,
+            extra_body=preset._extra_body,
         )

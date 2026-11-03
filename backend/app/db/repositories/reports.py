@@ -26,7 +26,11 @@ class ReportRepository:
     ) -> ReportInDB:
         now = datetime.now()
         doc = {
-            **report.model_dump(),
+            **report.model_dump(exclude={"run_id", "user_id"}),
+            # model_dump() serialises PyObjectId to str, but every query filters on
+            # ObjectId, so store the ids natively.
+            "run_id": report.run_id,
+            "user_id": report.user_id,
             "html_path": html_path,
             "pdf_path": pdf_path,
             "generated_at": now,
@@ -34,7 +38,7 @@ class ReportRepository:
         }
         result = await self.collection.find_one_and_update(
             {"run_id": report.run_id},
-            {"$set": doc, "$setOnInsert": {"run_id": report.run_id}},
+            {"$set": doc},
             upsert=True,
             return_document=True,
         )

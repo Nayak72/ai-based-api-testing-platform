@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Annotated, Any, Literal
 
 from bson import ObjectId
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, GetJsonSchemaHandler, field_validator
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import core_schema
 
@@ -244,6 +244,12 @@ class TestCaseInDB(TestCaseBase):
     __test__ = False
     id: PyObjectId = Field(alias="_id")
     created_at: datetime = Field(default_factory=lambda: datetime.now())
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _default_missing_created_at(cls, value: Any) -> Any:
+        # Documents written by an earlier bug stored created_at=None.
+        return datetime.now() if value is None else value
 
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
 

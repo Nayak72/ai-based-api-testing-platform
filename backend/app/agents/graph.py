@@ -64,11 +64,14 @@ async def run_agentic_pipeline(state: SessionState) -> SessionState:
                         response = await provider.generate(
                             GenerationRequest(
                                 prompt="Reply with OK.",
-                                max_tokens=1,
+                                max_tokens=16,
                                 response_format="text",
+                                allow_truncated=True,
                             )
                         )
-                        canary = {"ok": bool(response.content.strip()), "latency_ms": response.latency_ms}
+                        # Reaching here means HTTP 200 with a well-formed completion; with a tiny
+                        # token budget (or reasoning models) the output may legitimately be cut off.
+                        canary = {"ok": True, "latency_ms": response.latency_ms, "finish_reason": response.finish_reason}
                     except Exception as exc:
                         canary = {"ok": False, "error": str(exc)}
                 provider_health[provider.name.value] = {

@@ -26,6 +26,8 @@ class GenerationRequest:
     schema: dict | None = None
     model: str | None = None
     timeout: float | None = None
+    # For liveness probes: a completion cut off by max_tokens still proves the model works.
+    allow_truncated: bool = False
 
 
 @dataclass
