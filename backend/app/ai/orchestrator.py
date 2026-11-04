@@ -23,10 +23,10 @@ class AIOrchestrator:
     def __init__(
         self,
         primary: AIProvider,
-        fallback: AIProvider,
+        fallback: AIProvider | None = None,
         max_retries_per_provider: int = 2,
     ):
-        self.providers = [primary, fallback]
+        self.providers = [primary] if fallback is None else [primary, fallback]
         self.primary_provider = primary.name
         self.max_retries = max_retries_per_provider
         from app.config import get_settings
@@ -126,26 +126,34 @@ def create_orchestrator(
 ) -> AIOrchestrator:
     settings = get_settings()
     primary_name = primary_provider or settings.ai_primary_provider
-    fallback_name = settings.ai_fallback_provider
+    fallback_name = settings.ai_fallback_provider or None
+    if fallback_name == primary_name:
+        fallback_name = None
 
-    openrouter_provider = OpenRouterProvider(
-        api_key=api_key if (primary_name == "openrouter" and api_key) else settings.openrouter_api_key,
-        default_model=model if (primary_name == "openrouter" and model) else settings.openrouter_default_model,
-    )
-    nim_provider = NIMProvider(
-        api_key=api_key if (primary_name == "nim" and api_key) else settings.nim_api_key,
-        default_model=model if (primary_name == "nim" and model) else settings.nim_default_model,
-    )
+    def build(name: str):
+        # Built lazily so an unused cloud provider needs no credentials.
+        override_model = model if (name == primary_name and model) else None
+        override_key = api_key if (name == primary_name and api_key) else None
+        if name == "openrouter":
+            return OpenRouterProvider(
+                api_key=override_key or settings.openrouter_api_key,
+                default_model=override_model or settings.openrouter_default_model,
+            )
+        if name == "nim":
+            return NIMProvider(
+                api_key=override_key or settings.nim_api_key,
+                default_model=override_model or settings.nim_default_model,
+            )
+        if name == "ollama":
+            from app.ai.providers.openai_compat import make_ollama_provider
 
-    providers = {
-        "openrouter": openrouter_provider,
-        "nim": nim_provider,
-    }
+            return make_ollama_provider(model=override_model)
+        return None
 
-    primary = providers.get(primary_name)
-    fallback = providers.get(fallback_name)
+    primary = build(primary_name)
+    fallback = build(fallback_name) if fallback_name else None
 
-    if not primary or not fallback:
+    if not primary or (fallback_name and not fallback):
         raise ValueError("AI provider routing must use supported configured providers")
 
     return AIOrchestrator(

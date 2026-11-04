@@ -60,6 +60,7 @@ export function useTestCases(specId: string, page = 1, pageSize = 50, endpointId
     queryKey: ['test-cases', specId, page, pageSize, endpointId, category],
     queryFn: () => testCasesApi.list(specId, { page, page_size: pageSize, endpoint_id: endpointId, category }),
     enabled: !!specId,
+    refetchInterval: (query) => query.state.data?.data.generation_status === 'running' ? 1800 : false,
   })
 }
 

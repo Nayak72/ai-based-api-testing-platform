@@ -11,6 +11,7 @@ from app.api.schemas.test_cases import (
 )
 from app.config import get_settings
 from app.db.repositories import spec_repository, test_case_repository
+from app.db.mongo import get_collection
 from app.generators.orchestrator import GenerationOrchestrator
 
 logger = structlog.get_logger()
@@ -41,17 +42,41 @@ async def generate_test_cases(
 
     settings = get_settings()
     provider = settings.ai_primary_provider
-    model = settings.nim_default_model if provider == "nim" else settings.openrouter_default_model
-    orchestrator = GenerationOrchestrator()
-    background_tasks.add_task(
-        orchestrator.generate_for_spec,
-        spec_id=obj_id,
-        user_id=user_id,
-        categories=categories,
-        prompt_version=request.prompt_version,
-        dry_run=request.dry_run,
-        model=model,
+    model = settings.default_model_for(provider)
+    await get_collection("api_specs").update_one(
+        {"_id": obj_id, "user_id": user_id},
+        {"$set": {"test_generation_status": "running", "test_generation_error": None}},
     )
+
+    async def run_generation() -> None:
+        orchestrator = GenerationOrchestrator()
+        try:
+            outcome = await orchestrator.generate_for_spec(
+                spec_id=obj_id,
+                user_id=user_id,
+                categories=categories,
+                prompt_version=request.prompt_version,
+                dry_run=request.dry_run,
+                model=model,
+            )
+            status_value = "completed_with_errors" if outcome.get("failed", 0) else "completed"
+            await get_collection("api_specs").update_one(
+                {"_id": obj_id},
+                {"$set": {
+                    "test_generation_status": status_value,
+                    "test_generation_error": "; ".join(outcome.get("errors", [])) or None,
+                }},
+            )
+        except Exception as exc:
+            logger.exception("Test case generation failed", spec_id=spec_id)
+            await get_collection("api_specs").update_one(
+                {"_id": obj_id},
+                {"$set": {"test_generation_status": "failed", "test_generation_error": str(exc)}},
+            )
+        finally:
+            await orchestrator.close()
+
+    background_tasks.add_task(run_generation)
 
     return {
         "message": "Test generation started",
@@ -83,6 +108,9 @@ async def list_test_cases(
     skip = (page - 1) * page_size
     test_cases = await test_case_repository.list_by_spec(obj_id, endpoint_id, category, skip, page_size)
     total = await test_case_repository.count_by_spec(obj_id, endpoint_id, category)
+    generation = await get_collection("api_specs").find_one(
+        {"_id": obj_id}, {"test_generation_status": 1, "test_generation_error": 1}
+    ) or {}
 
     return TestCaseListResponse(
         test_cases=[
@@ -104,6 +132,8 @@ async def list_test_cases(
         total=total,
         page=page,
         page_size=page_size,
+        generation_status=generation.get("test_generation_status"),
+        generation_error=generation.get("test_generation_error"),
     )
 
 

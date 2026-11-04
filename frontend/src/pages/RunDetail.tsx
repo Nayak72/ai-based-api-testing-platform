@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useRun, useRunResults, useCancelRun, useRetryFailed, useAnalyzeRun, useGenerateReport } from '../hooks/useRuns'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../components/ui/Card'
@@ -22,6 +22,7 @@ export function RunDetail() {
   const [reportFormat, setReportFormat] = useState<'html' | 'pdf' | 'both'>('html')
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [confirmRetryOpen, setConfirmRetryOpen] = useState(false)
+  const [analysisRequested, setAnalysisRequested] = useState(false)
 
   const { data: runData, isLoading: runLoading, refetch: refetchRun } = useRun(runId!)
   const { data: resultsData, isLoading: resultsLoading, refetch: refetchResults } = useRunResults(runId!, resultPage, resultPageSize, statusFilter || undefined, categoryFilter || undefined)
@@ -42,6 +43,23 @@ export function RunDetail() {
 
   const run = runData?.data
   const results = resultsData?.data.results || []
+  const analysisRunning = analysisRequested || run?.analysis_status === 'running'
+
+  useEffect(() => {
+    if (!analysisRunning) return
+    const timer = window.setInterval(() => {
+      void refetchRun()
+      void refetchResults()
+    }, 1800)
+    return () => window.clearInterval(timer)
+  }, [analysisRunning, refetchRun, refetchResults])
+
+  useEffect(() => {
+    if (run?.analysis_status === 'completed' || run?.analysis_status === 'completed_with_errors' || run?.analysis_status === 'failed') {
+      setAnalysisRequested(false)
+      void refetchResults()
+    }
+  }, [run?.analysis_status, refetchResults])
 
   const handleCancel = async () => {
     try {
@@ -71,8 +89,9 @@ export function RunDetail() {
   const handleAnalyze = async () => {
     try {
       await analyzeMutation.mutateAsync(runId!)
+      setAnalysisRequested(true)
       toast.success('Analysis started')
-      refetchResults()
+      await refetchRun()
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Analysis failed')
     }
@@ -107,8 +126,8 @@ export function RunDetail() {
 
   const canCancel = run.status === 'running' || run.status === 'pending'
   const canRetry = run.status === 'completed' || run.status === 'failed'
-  const canAnalyze = run.status === 'completed'
-  const canReport = run.status === 'completed'
+  const canAnalyze = run.status === 'completed' || run.status === 'completed_with_errors'
+  const canReport = canAnalyze
 
   return (
     <div className="space-y-6">
@@ -136,9 +155,9 @@ export function RunDetail() {
             </Button>
           )}
           {canAnalyze && (
-            <Button variant="secondary" size="sm" onClick={handleAnalyze} loading={analyzeMutation.isPending}>
+            <Button variant="secondary" size="sm" onClick={handleAnalyze} loading={analyzeMutation.isPending || analysisRunning} disabled={analysisRunning}>
               <Brain className="h-4 w-4" />
-              Analyze
+              {analysisRunning ? 'Analyzing…' : 'Analyze'}
             </Button>
           )}
           {canReport && (
@@ -176,7 +195,7 @@ export function RunDetail() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Test Results</CardTitle>
-                  <CardDescription>{results.length} of {run.summary.total} results</CardDescription>
+                  <CardDescription>{resultsData?.data.total ?? 0} stored results · {run.summary.total} in run summary</CardDescription>
                 </div>
                 {isPolling && (
                   <div className="flex items-center gap-2 text-sm text-brand-600">
@@ -187,6 +206,31 @@ export function RunDetail() {
               </div>
             </CardHeader>
             <CardContent>
+              {analysisRunning && (
+                <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200" role="status">
+                  Analysis is running: {run.analysis_completed ?? 0} of {run.analysis_total ?? 0} results processed. This page will refresh as findings are saved.
+                </div>
+              )}
+              {run.analysis_status === 'completed' && (
+                <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+                  Analysis complete: {run.analysis_completed ?? 0} results analyzed.
+                </div>
+              )}
+              {run.analysis_status === 'completed_with_errors' && (
+                <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  Analysis finished with {run.analysis_error_count ?? 0} item(s) needing manual review. Available findings are shown in each result.
+                </div>
+              )}
+              {run.analysis_status === 'failed' && (
+                <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200" role="alert">
+                  Analysis failed: {run.analysis_error || 'Check backend logs, then try Analyze again.'}
+                </div>
+              )}
+              {(resultsData?.data.total ?? 0) === 0 && run.summary.total > 0 && (
+                <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" role="alert">
+                  This run summary reports {run.summary.total} tests, but the API returned no saved result records. Analysis and result details require those records; check the backend logs and confirm the frontend and backend are using the same MongoDB database.
+                </div>
+              )}
               {resultsLoading ? (
                 <div className="flex justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-3 border-brand-500 border-t-transparent" />

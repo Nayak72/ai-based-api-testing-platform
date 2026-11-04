@@ -22,6 +22,7 @@ const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string; crum
   { match: (path) => /^\/specs\/[^/]+$/.test(path), title: 'Specification detail', crumb: 'Specifications' },
   { match: (path) => path === '/specs', title: 'Specifications' },
   { match: (path) => /^\/runs\/[^/]+$/.test(path), title: 'Run detail', crumb: 'Test runs' },
+  { match: (path) => /^\/runs\/[^/]+\/results\/[^/]+$/.test(path), title: 'Result detail', crumb: 'Test runs' },
   { match: (path) => path === '/runs', title: 'Test runs' },
   { match: (path) => /^\/reports\/[^/]+$/.test(path), title: 'Report detail', crumb: 'Reports' },
   { match: (path) => path === '/reports', title: 'Reports' },

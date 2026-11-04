@@ -24,6 +24,14 @@ export function useRunResults(runId: string, page = 1, pageSize = 50, status?: s
   })
 }
 
+export function useRunResult(runId: string, resultId: string) {
+  return useQuery({
+    queryKey: ['run-result', runId, resultId],
+    queryFn: () => runsApi.result(runId, resultId),
+    enabled: !!runId && !!resultId,
+  })
+}
+
 export function useCreateRun() {
   const queryClient = useQueryClient()
   return useMutation({

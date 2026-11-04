@@ -194,10 +194,11 @@ def test_provider_models_and_routing_come_from_environment_settings():
     from app.ai.providers.openai_compat import make_openrouter_provider
 
     settings = get_settings()
-    assert settings.ai_primary_provider == "nim"
-    assert settings.nim_api_key
-    assert settings.nim_base_url
+    assert settings.ai_primary_provider in {"nim", "openrouter", "ollama"}
+    assert settings.default_model_for(settings.ai_primary_provider)
+    # Cloud presets must still read their model from settings even when unused.
     assert settings.nim_default_model
+    assert settings.nim_base_url
 
     # OpenRouterProvider defaults to settings model
     provider = OpenRouterProvider()

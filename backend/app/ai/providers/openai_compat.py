@@ -279,7 +279,8 @@ def make_ollama_provider(
         api_key=None,
         default_model=model or settings.local_llm_model,
         capabilities=ModelCapabilities(json_mode=True, tools=False, context_window=8192, is_local=True),
-        timeout=180.0,
+        # CPU inference is slow; the cloud-sized default would time out mid-generation.
+        timeout=settings.local_llm_timeout,
     )
 
 

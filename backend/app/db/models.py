@@ -307,6 +307,13 @@ class TestRunInDB(TestRunBase):
     summary: RunSummary = Field(default_factory=RunSummary)
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    analysis_status: str | None = None
+    analysis_total: int = 0
+    analysis_completed: int = 0
+    analysis_error_count: int = 0
+    analysis_error: str | None = None
+    analysis_started_at: datetime | None = None
+    analysis_completed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now())
 
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)

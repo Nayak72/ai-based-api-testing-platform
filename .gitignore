@@ -23,10 +23,12 @@ __pycache__/
 .Python
 venv/
 .venv/
+.venv*/
 env/
 ENV/
 **/venv/
 **/.venv/
+**/.venv*/
 
 # Python packaging & distribution
 build/
@@ -128,3 +130,5 @@ backend/logs/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+/backend/.env.bak-before-ollama

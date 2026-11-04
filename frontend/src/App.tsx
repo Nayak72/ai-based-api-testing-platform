@@ -6,6 +6,7 @@ import { SpecUpload } from './pages/SpecUpload'
 import { SpecDetail } from './pages/SpecDetail'
 import { TestCases } from './pages/TestCases'
 import { RunDetail } from './pages/RunDetail'
+import { RunResultDetail } from './pages/RunResultDetail'
 import { RunHistory } from './pages/RunHistory'
 import { ReportView } from './pages/ReportView'
 import { ReportsList } from './pages/ReportsList'
@@ -76,6 +77,7 @@ export function App() {
                 <Route path="/specs/:specId/test-cases" element={<TestCases />} />
                 <Route path="/runs" element={<RunHistory />} />
                 <Route path="/runs/:runId" element={<RunDetail />} />
+                <Route path="/runs/:runId/results/:resultId" element={<RunResultDetail />} />
                 <Route path="/reports" element={<ReportsList />} />
                 <Route path="/reports/:runId" element={<ReportView />} />
                 <Route path="/settings" element={<Settings />} />

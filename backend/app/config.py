@@ -111,6 +111,7 @@ class Settings(BaseSettings):
     agentic_mode: bool = False
     local_llm_base_url: str = ""
     local_llm_model: str = ""
+    local_llm_timeout: float = 600.0
 
     # Target Safety
     owned_host_allowlist: str | list[str] = []
@@ -161,19 +162,32 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_provider_configuration(self) -> "Settings":
         """Provider credentials, URLs, and models must come from the environment."""
-        supported = {"nim", "openrouter"}
-        if self.ai_primary_provider not in supported or self.ai_fallback_provider not in supported:
-            raise ValueError("AI provider routing must use supported providers configured in .env")
+        supported = {"nim", "openrouter", "ollama"}
+        if self.ai_primary_provider not in supported:
+            raise ValueError("AI_PRIMARY_PROVIDER must be one of: nim, openrouter, ollama")
+        # The fallback is optional so a single local Ollama model can run alone.
+        if self.ai_fallback_provider and self.ai_fallback_provider not in supported:
+            raise ValueError("AI_FALLBACK_PROVIDER must be empty or one of: nim, openrouter, ollama")
         if self.ai_primary_provider == self.ai_fallback_provider:
             raise ValueError("AI_PRIMARY_PROVIDER and AI_FALLBACK_PROVIDER must be different")
         configured = {
             "nim": (self.nim_api_key, self.nim_base_url, self.nim_default_model),
             "openrouter": (self.openrouter_api_key, self.openrouter_base_url, self.openrouter_default_model),
+            "ollama": (self.local_llm_base_url, self.local_llm_model),
         }
-        for provider in {self.ai_primary_provider, self.ai_fallback_provider}:
+        for provider in {self.ai_primary_provider, self.ai_fallback_provider} - {""}:
             if not all(configured[provider]):
+                if provider == "ollama":
+                    raise ValueError("ollama requires LOCAL_LLM_BASE_URL and LOCAL_LLM_MODEL in .env")
                 raise ValueError(f"{provider} requires API key, base URL, and default model in .env")
         return self
+
+    def default_model_for(self, provider: str) -> str:
+        return {
+            "nim": self.nim_default_model,
+            "openrouter": self.openrouter_default_model,
+            "ollama": self.local_llm_model,
+        }.get(provider, "")
 
 
 @lru_cache

@@ -78,7 +78,7 @@ export function SpecDetail() {
           <Link to={`/specs/${specId}/test-cases`}>
             <Button>
               <PlayCircle className="h-4 w-4" />
-              Generate Tests
+              Test Cases & Generation
             </Button>
           </Link>
         </div>
@@ -105,7 +105,6 @@ export function SpecDetail() {
                       { key: 'method', header: 'Method', width: '100px' },
                       { key: 'path', header: 'Path', sortable: true },
                       { key: 'summary', header: 'Summary' },
-                      { key: 'actions', header: '', width: '100px' },
                     ]}
                     data={endpoints}
                     keyExtractor={(ep) => ep.endpoint_id}
@@ -124,11 +123,6 @@ export function SpecDetail() {
                         </td>
                         <td className="font-mono text-sm text-zinc-900 dark:text-zinc-50">{row.path}</td>
                         <td className="text-zinc-600 dark:text-zinc-400 truncate max-w-[300px]">{row.summary || '—'}</td>
-                        <td>
-                          <Link to={`/specs/${specId}/test-cases?endpoint=${row.endpoint_id}`} className="p-2 rounded-8 text-zinc-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors" title="Test Cases">
-                            <PlayCircle className="h-4 w-4" />
-                          </Link>
-                        </td>
                       </>
                     )}
                   </Table>

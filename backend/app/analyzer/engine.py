@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 import structlog
 from bson import ObjectId
@@ -6,6 +7,7 @@ from bson import ObjectId
 from app.ai import GenerationRequest, ProviderError, create_orchestrator
 from app.db.models import LLMAnalysis, TestResultInDB
 from app.db.repositories import result_repository
+from app.db.mongo import get_collection
 
 logger = structlog.get_logger()
 
@@ -25,18 +27,53 @@ class ResultAnalyzer:
         self._initialized = True
 
     async def analyze_run(self, run_id: ObjectId):
-        results = await result_repository.list_by_run(run_id, limit=10000)
-        logger.info("Starting analysis", run_id=str(run_id), results=len(results))
+        run_collection = get_collection("test_runs")
+        completed = errors = 0
+        try:
+            results = await result_repository.list_by_run(run_id, limit=10000)
+            candidates = [r for r in results if r.status in ("passed", "failed") and not r.llm_analysis]
+            logger.info("Starting analysis", run_id=str(run_id), results=len(candidates))
 
-        for result in results:
-            if result.status in ("passed", "failed") and not result.llm_analysis:
+            for result in candidates:
                 try:
                     analysis = await self.analyze_result(result)
                     await result_repository.update_analysis(result.id, analysis.model_dump())
-                except Exception as e:
-                    logger.error("Analysis failed for result", result_id=str(result.id), error=str(e))
+                    if analysis.risk_level == "unknown":
+                        errors += 1
+                except Exception as exc:
+                    errors += 1
+                    logger.exception("Analysis failed for result", result_id=str(result.id))
+                    fallback = LLMAnalysis(
+                        risk_level="unknown",
+                        summary="Analysis could not be completed; review this result manually.",
+                        findings=[{"type": "analysis_error", "description": str(exc), "evidence": ""}],
+                        recommendations=["Retry analysis or review the test result manually."],
+                        false_positive_likelihood=0.5,
+                    )
+                    await result_repository.update_analysis(result.id, fallback.model_dump())
+                finally:
+                    completed += 1
+                    await run_collection.update_one(
+                        {"_id": run_id},
+                        {"$set": {"analysis_completed": completed, "analysis_error_count": errors}},
+                    )
 
-        logger.info("Analysis completed", run_id=str(run_id))
+            status = "completed_with_errors" if errors else "completed"
+            await run_collection.update_one(
+                {"_id": run_id},
+                {"$set": {"analysis_status": status, "analysis_completed": completed,
+                           "analysis_error_count": errors, "analysis_completed_at": datetime.now(UTC)}},
+            )
+            logger.info("Analysis completed", run_id=str(run_id), analyzed=completed, errors=errors)
+        except Exception as exc:
+            logger.exception("Run analysis worker failed", run_id=str(run_id))
+            await run_collection.update_one(
+                {"_id": run_id},
+                {"$set": {"analysis_status": "failed", "analysis_error": str(exc),
+                           "analysis_error_count": errors + 1, "analysis_completed_at": datetime.now(UTC)}},
+            )
+        finally:
+            await self.close()
 
     async def analyze_result(self, result: TestResultInDB) -> LLMAnalysis:
         prompt = self._build_analysis_prompt(result)

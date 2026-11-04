@@ -105,6 +105,13 @@ export interface Run {
   started_at: string | null
   completed_at: string | null
   created_at: string
+  analysis_status?: 'running' | 'completed' | 'completed_with_errors' | 'failed' | null
+  analysis_total?: number
+  analysis_completed?: number
+  analysis_error_count?: number
+  analysis_error?: string | null
+  analysis_started_at?: string | null
+  analysis_completed_at?: string | null
 }
 
 export interface Result {
@@ -189,7 +196,7 @@ export const testCasesApi = {
     dry_run?: boolean
   }) => api.post(`/specs/${specId}/test-cases/generate`, data),
   list: (specId: string, params?: { endpoint_id?: string; category?: string; page?: number; page_size?: number }) =>
-    api.get<{ test_cases: TestCase[]; total: number; page: number; page_size: number }>(`/specs/${specId}/test-cases`, { params }),
+    api.get<{ test_cases: TestCase[]; total: number; page: number; page_size: number; generation_status?: string | null; generation_error?: string | null }>(`/specs/${specId}/test-cases`, { params }),
   get: (specId: string, testCaseId: string) => api.get<TestCase>(`/specs/${specId}/test-cases/${testCaseId}`),
   update: (specId: string, testCaseId: string, data: Partial<TestCase>) => api.patch<TestCase>(`/specs/${specId}/test-cases/${testCaseId}`, data),
   delete: (specId: string, testCaseId: string) => api.delete(`/specs/${specId}/test-cases/${testCaseId}`),

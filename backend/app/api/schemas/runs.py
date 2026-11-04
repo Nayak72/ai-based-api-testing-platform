@@ -63,6 +63,13 @@ class RunResponse(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
+    analysis_status: str | None = None
+    analysis_total: int = 0
+    analysis_completed: int = 0
+    analysis_error_count: int = 0
+    analysis_error: str | None = None
+    analysis_started_at: datetime | None = None
+    analysis_completed_at: datetime | None = None
 
 
 class RunListResponse(BaseModel):

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTestCases, useGenerateTestCases, useDeleteTestCase } from '../hooks/useSpecs'
 import { Card, CardHeader, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -46,7 +46,7 @@ export function TestCases() {
       })
       toast.success('Test generation started')
       setGenerateDialogOpen(false)
-      refetch()
+      await refetch()
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Generation failed')
     }
@@ -90,6 +90,7 @@ export function TestCases() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
+          <Link to={`/specs/${specId}`} className="mb-2 inline-block text-sm text-zinc-500 hover:text-brand-600">← Back to specification</Link>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">Test Cases</h1>
           <p className="text-zinc-500 dark:text-zinc-400 mt-1">Generated test cases for this specification</p>
         </div>
@@ -98,6 +99,11 @@ export function TestCases() {
           Generate Tests
         </Button>
       </div>
+
+      {data?.data.generation_status === 'running' && <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200" role="status">Generating test cases… This page refreshes automatically when new cases are saved.</div>}
+      {data?.data.generation_status === 'failed' && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200" role="alert">Generation failed: {data.data.generation_error || 'Check backend logs for details.'}</div>}
+      {data?.data.generation_status === 'completed' && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">Generation completed. {data.data.total} test cases are available for this specification.</div>}
+      {data?.data.generation_status === 'completed_with_errors' && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Generation finished with some failed units. {data.data.total} test cases are available. {data.data.generation_error}</div>}
 
       <Card>
         <CardHeader>

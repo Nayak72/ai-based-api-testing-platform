@@ -101,6 +101,13 @@ async def list_runs(
                 started_at=r.started_at,
                 completed_at=r.completed_at,
                 created_at=r.created_at,
+                analysis_status=r.analysis_status,
+                analysis_total=r.analysis_total,
+                analysis_completed=r.analysis_completed,
+                analysis_error_count=r.analysis_error_count,
+                analysis_error=r.analysis_error,
+                analysis_started_at=r.analysis_started_at,
+                analysis_completed_at=r.analysis_completed_at,
             )
             for r in runs
         ],
@@ -133,6 +140,13 @@ async def get_run(run_id: str, user_id: CurrentUserId):
         started_at=run.started_at,
         completed_at=run.completed_at,
         created_at=run.created_at,
+        analysis_status=run.analysis_status,
+        analysis_total=run.analysis_total,
+        analysis_completed=run.analysis_completed,
+        analysis_error_count=run.analysis_error_count,
+        analysis_error=run.analysis_error,
+        analysis_started_at=run.analysis_started_at,
+        analysis_completed_at=run.analysis_completed_at,
     )
 
 
@@ -299,12 +313,35 @@ async def analyze_run(run_id: str, user_id: CurrentUserId, background_tasks: Bac
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    if run.status != "completed":
+    if run.status not in {"completed", "completed_with_errors"}:
         raise HTTPException(status_code=400, detail="Run must be completed to analyze")
+    if run.analysis_status == "running":
+        return {"message": "Analysis is already running", "run_id": run_id}
 
+    results = await result_repository.list_by_run(obj_id, limit=10000)
+    eligible = [r for r in results if r.status in {"passed", "failed"}]
+    if not eligible:
+        raise HTTPException(status_code=409, detail="This run has no persisted results to analyze")
+
+    from datetime import UTC, datetime
+    from app.db.mongo import get_collection
     from app.analyzer.engine import ResultAnalyzer
 
     analyzer = ResultAnalyzer()
+
+    await get_collection("test_runs").update_one(
+        {"_id": obj_id, "user_id": user_id},
+        {"$set": {
+            "analysis_status": "running",
+            "analysis_total": sum(not r.llm_analysis for r in eligible),
+            "analysis_completed": 0,
+            "analysis_error_count": 0,
+            "analysis_error": None,
+            "analysis_started_at": datetime.now(UTC),
+            "analysis_completed_at": None,
+        }},
+    )
+
     background_tasks.add_task(analyzer.analyze_run, obj_id)
 
     return {"message": "Analysis started", "run_id": run_id}

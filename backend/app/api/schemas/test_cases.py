@@ -72,3 +72,5 @@ class TestCaseListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    generation_status: str | None = None
+    generation_error: str | None = None
