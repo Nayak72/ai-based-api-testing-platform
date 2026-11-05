@@ -27,16 +27,15 @@ export function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 px-4">
+    <div className="page-enter flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
-            API Testing Platform
-          </h1>
+          <img src="/api-mark.svg" alt="" className="mx-auto mb-4 h-12 w-12" />
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-50">API Testing Platform</h1>
           <p className="mt-2 text-zinc-500 dark:text-zinc-400">Sign in to your account</p>
         </div>
 
-        <div className="card p-8">
+        <div className="glass-card rounded-2xl border p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">

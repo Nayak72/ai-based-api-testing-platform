@@ -7,6 +7,10 @@ import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
 import './index.css'
 
+if (localStorage.getItem('theme') !== 'light') {
+  document.documentElement.classList.add('dark')
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

@@ -40,7 +40,7 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
   useEffect(() => {
     const saved = localStorage.getItem('theme')
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const isDark = saved === 'dark' || (saved !== 'light' && prefersDark)
+    const isDark = saved !== 'light' || (saved === null && prefersDark)
     document.documentElement.classList.toggle('dark', isDark)
     setDarkMode(isDark)
   }, [])
@@ -84,8 +84,8 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
             <List className="h-6 w-6" />
           </button>
           <div className="hidden sm:block">
-            {page.crumb && <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{page.crumb}</p>}
-            <h1 className="text-base font-semibold text-slate-950 dark:text-white">{page.title}</h1>
+            {page.crumb && <p className="font-mono text-[10px] uppercase tracking-[.14em] text-slate-500">{page.crumb}</p>}
+            <h1 className="text-base font-bold leading-tight text-slate-100">{page.title}</h1>
           </div>
         </div>
 

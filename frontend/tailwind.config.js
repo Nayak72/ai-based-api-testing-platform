@@ -9,16 +9,16 @@ export default {
     extend: {
       colors: {
         brand: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50: '#e6feff',
+          100: '#c8fbff',
+          200: '#90f7ff',
+          300: '#55f2ff',
+          400: '#20efff',
+          500: '#00ddea',
+          600: '#00b9c7',
+          700: '#008c99',
+          800: '#056c76',
+          900: '#0d535b',
         },
         zinc: {
           50: '#fafafa',
@@ -34,8 +34,8 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Geist', 'system-ui', 'sans-serif'],
-        mono: ['Geist Mono', 'monospace'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       borderRadius: {
         '8': '8px',

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -68,6 +70,87 @@
       border-color: CanvasText !important;
     }
   }
+}
+
+/* Cipherguard inspired API workbench skin */
+html { color-scheme: dark; }
+body {
+  min-height: 100vh;
+  color: #e2e8f0;
+  background-color: #020817;
+  background-image:
+    radial-gradient(ellipse 78% 42% at 50% -12%, rgba(0,245,255,.085), transparent 70%),
+    linear-gradient(rgba(0,245,255,.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,245,255,.022) 1px, transparent 1px);
+  background-size: auto, 60px 60px, 60px 60px;
+  font-family: Inter, system-ui, sans-serif;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 80% 18%, rgba(139,92,246,.045), transparent 38%);
+}
+::selection { background: rgba(0,245,255,.24); color: #e6feff; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #020817; }
+::-webkit-scrollbar-thumb { border-radius: 8px; background: rgba(0,245,255,.25); }
+
+.glass-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(13,31,60,.91), rgba(7,15,30,.97));
+  border-color: rgba(30,58,95,.72);
+  box-shadow: 0 12px 32px rgba(0,0,0,.18), inset 0 1px 0 rgba(148,221,255,.035);
+  backdrop-filter: blur(18px);
+}
+.glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(0,245,255,.035), transparent 42%);
+}
+.glass-card > * { position: relative; }
+.stage-card.border-red-300 { border-color: rgba(255,51,102,.45) !important; box-shadow: 0 0 24px rgba(255,51,102,.07); }
+.stage-card.border-brand-600 { border-color: rgba(0,245,255,.48) !important; box-shadow: 0 0 26px rgba(0,245,255,.075); }
+.stage-card.border-amber-300 { border-color: rgba(255,215,0,.42) !important; }
+.glass-surface {
+  background: rgba(6,15,30,.92) !important;
+  border-color: rgba(30,58,95,.65) !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,.18), inset 0 1px 0 rgba(148,221,255,.035) !important;
+  backdrop-filter: blur(20px) saturate(1.15);
+}
+.sidebar-link { color: #94a3b8; transition: color .18s, background .18s, transform .18s, border-color .18s; }
+.sidebar-link:hover { color: #e2e8f0; background: rgba(13,31,60,.78); transform: translateX(2px); }
+.sidebar-link-active {
+  color: #00f5ff !important;
+  background: rgba(0,245,255,.075) !important;
+  box-shadow: inset 0 0 0 1px rgba(0,245,255,.22), 0 0 24px rgba(0,245,255,.055);
+}
+.btn-primary { color: #02111a !important; background: #00e5f2 !important; box-shadow: 0 0 22px rgba(0,245,255,.12); }
+.btn-primary:hover { background: #65f6ff !important; box-shadow: 0 0 26px rgba(0,245,255,.23); }
+.input, input:not([type=checkbox]):not([type=radio]), select, textarea {
+  border-color: rgba(51,83,121,.75);
+  background-color: rgba(2,8,23,.68);
+  color: #e2e8f0;
+}
+.input:focus, input:focus, select:focus, textarea:focus { border-color: rgba(0,245,255,.65); box-shadow: 0 0 0 3px rgba(0,245,255,.09); outline: none; }
+.table-container { border-color: rgba(30,58,95,.72); }
+.table th { background: rgba(13,31,60,.84); color: #94a3b8; border-color: rgba(30,58,95,.5); }
+.table td { border-color: rgba(30,58,95,.38); }
+.table tbody tr:hover { background: rgba(0,245,255,.035); }
+.modal-content { background: rgba(7,15,30,.98) !important; border-color: rgba(30,58,95,.85) !important; }
+.page-enter { animation: pageReveal .36s ease-out both; }
+@keyframes pageReveal { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+.page-kicker { color: #00ddea !important; font-family: 'JetBrains Mono', monospace; letter-spacing: .12em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter { animation: none; }
+  .sidebar-link { transition: none; }
 }
 
 @layer components {

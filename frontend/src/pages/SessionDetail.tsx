@@ -108,7 +108,7 @@ export function SessionDetail() {
     switch (status) {
       case 'completed':
       case 'completed_with_errors':
-        return <CheckCircle className="w-4 h-4 text-brand-600" />
+        return <CheckCircle className="w-4 h-4 text-emerald-400" />
       case 'running':
       case 'progress':
       case 'started':
@@ -126,11 +126,13 @@ export function SessionDetail() {
 
   const totalTokens = events.reduce((acc, ev) => acc + (ev.tokens || 0), 0)
   const totalLatency = events.reduce((acc, ev) => acc + (ev.latency_ms || 0), 0)
+  const terminalStages = AGENT_STEPS.filter(({ stage }) => ['completed', 'completed_with_errors', 'skipped'].includes(session?.stages?.[stage]?.status || '')).length
+  const pipelinePercent = Math.round((terminalStages / AGENT_STEPS.length) * 100)
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="page-enter mx-auto max-w-[1500px] space-y-6">
       {/* Top Header Card */}
-      <Card className="p-6">
+      <Card className="p-6 sm:p-7">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
@@ -138,11 +140,11 @@ export function SessionDetail() {
                 <Cpu className="w-5 h-5" />
               </span>
               <div>
-                <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
-                  {session?.name || 'Autonomous Agent Session'}
+                <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+                  {session?.name || 'API Security Session'}
                 </h1>
-                <p className="text-xs text-zinc-500 font-mono mt-0.5">
-                  ID: {id} • Base URL: {session?.base_url || 'Default'}
+                <p className="mt-1 font-mono text-[11px] text-slate-400">
+                  <span className="text-slate-600">SESSION</span> {id} <span className="mx-1 text-slate-600">/</span> <span className="text-slate-600">TARGET</span> {session?.base_url || '—'}
                 </p>
               </div>
             </div>
@@ -174,7 +176,7 @@ export function SessionDetail() {
         </div>
 
         {/* Live Metrics Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+        <div className="mt-6 grid grid-cols-2 gap-4 border-t border-[#1e3a5f]/70 pt-5 sm:grid-cols-4">
           <div>
             <p className="text-xs text-zinc-400">Stream Status</p>
             <p className="text-sm font-semibold flex items-center gap-1.5 mt-0.5">
@@ -183,7 +185,7 @@ export function SessionDetail() {
                   isConnected ? 'bg-brand-600 animate-pulse' : 'bg-zinc-400'
                 }`}
               />
-              {isConnected ? 'Connected (SSE)' : isCompleted ? 'Completed' : 'Offline'}
+              <span className="font-mono text-xs">{isConnected ? 'CONNECTED · SSE' : isCompleted ? 'STREAM COMPLETE' : 'RECONNECTING'}</span>
             </p>
           </div>
           <div>
@@ -203,6 +205,15 @@ export function SessionDetail() {
             <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mt-0.5 font-mono">
               {(totalLatency / 1000).toFixed(2)}s
             </p>
+          </div>
+        </div>
+        <div className="mt-5 border-t border-[#1e3a5f]/50 pt-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-[.16em] text-slate-500">Pipeline completion</span>
+            <span className="font-mono text-xs text-brand-300">{terminalStages}/{AGENT_STEPS.length} stages · {pipelinePercent}%</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-[#020817] ring-1 ring-[#1e3a5f]/70">
+            <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400 transition-[width] duration-700" style={{ width: `${pipelinePercent}%` }} />
           </div>
         </div>
       </Card>
@@ -258,9 +269,9 @@ export function SessionDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Agent Stepper */}
         <div className="space-y-4">
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-            <Cpu className="w-5 h-5 text-brand-600" />
-            Agent Pipeline
+          <h2 className="flex items-center gap-2 text-base font-bold text-slate-100">
+            <Cpu className="h-5 w-5 text-brand-300" />
+            <span>Agent Pipeline</span>
           </h2>
 
           <div className="space-y-2">
@@ -277,7 +288,7 @@ export function SessionDetail() {
               return (
                 <Card
                   key={s.id}
-                  className={`p-3.5 transition-all ${
+                  className={`stage-card p-4 transition-all ${
                     hasFailed
                       ? 'border-red-300 bg-red-50/40 dark:bg-red-950/30 shadow-sm'
                       : isCurrent
@@ -290,8 +301,9 @@ export function SessionDetail() {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                      {idx + 1}. {s.name}
+                    <span className="flex items-center gap-2 text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-lg border font-mono text-[10px] ${isCompleted ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : isCurrent ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-200' : hasFailed ? 'border-rose-400/30 bg-rose-400/10 text-rose-300' : 'border-[#1e3a5f] bg-[#07152a] text-slate-500'}`}>{String(idx + 1).padStart(2, '0')}</span>
+                      {s.name}
                     </span>
                     {hasFailed ? (
                       <span className="text-red-600 text-xs font-bold flex items-center gap-1">
@@ -299,7 +311,7 @@ export function SessionDetail() {
                         Failed
                       </span>
                     ) : isCompleted ? (
-                      <span className="text-brand-600 text-xs font-bold flex items-center gap-1">
+                      <span className="flex items-center gap-1 text-xs font-bold text-emerald-400">
                         <CheckCircle className="w-3.5 h-3.5" />
                         Done
                       </span>
@@ -339,7 +351,7 @@ export function SessionDetail() {
         </div>
 
         {/* Right Column: Live Event Stream */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="space-y-4 lg:col-span-2">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
               <Lightning className="w-5 h-5 text-brand-600" />
@@ -350,7 +362,7 @@ export function SessionDetail() {
             </span>
           </div>
 
-          <div className="space-y-3">
+          <div className="max-h-[calc(100vh-17rem)] space-y-3 overflow-y-auto pr-1">
             {events.length === 0 && (
               <Card className="p-8 text-center text-zinc-400">
                 <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -361,11 +373,11 @@ export function SessionDetail() {
             {events.map((ev, i) => (
               <div
                 key={i}
-                className="p-4 rounded-16 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm space-y-2 animate-fade-in"
+                className="glass-card animate-fade-in space-y-2 rounded-16 border border-[#1e3a5f]/70 p-4"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-8 text-xs font-bold bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300 uppercase tracking-wide">
+                    <span className="rounded-lg border border-brand-300/20 bg-brand-300/10 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-brand-200">
                       {ev.agent}
                     </span>
                     <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">

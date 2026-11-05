@@ -55,13 +55,17 @@ export function Sidebar({ isOpen, onClose, collapsed = false, onToggleCollapse }
         )}
         aria-label="Main navigation"
       >
-        <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-slate-200/70 px-4 dark:border-slate-700/70">
+        <div className="flex h-[76px] flex-shrink-0 items-center justify-between border-b border-slate-200/70 px-4 dark:border-[#1e3a5f]/70">
           {!collapsed && (
             <Link to="/" className="flex items-center gap-2" aria-label="API Testing Platform">
-              <div className="w-8 h-8 rounded-12 bg-brand-600 flex items-center justify-center flex-shrink-0">
-                <Database className="h-5 w-5 text-white" />
+              <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-cyan-300/40 bg-cyan-300/10 shadow-[0_0_20px_rgba(0,245,255,.14)]">
+                <Database className="h-[18px] w-[18px] text-brand-300" />
+                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-[#060f1e] bg-emerald-400" />
               </div>
-              <span className="font-semibold text-lg text-zinc-900 dark:text-zinc-50 truncate">API Tester</span>
+              <div className="min-w-0">
+                <span className="block truncate text-sm font-extrabold tracking-wide text-white">API Tester</span>
+                <span className="block font-mono text-[9px] uppercase tracking-[.12em] text-slate-500">AI Testing Workbench</span>
+              </div>
             </Link>
           )}
           {onToggleCollapse && (
@@ -76,7 +80,7 @@ export function Sidebar({ isOpen, onClose, collapsed = false, onToggleCollapse }
           )}
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Main">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4" aria-label="Main">
           {navigation.map((item) => {
             const Icon = item.icon
             const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href))
