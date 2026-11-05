@@ -13,7 +13,6 @@ import {
   FileText,
   ThumbsUp,
   ThumbsDown,
-  Database,
   Lightning,
 } from '@phosphor-icons/react'
 import toast from 'react-hot-toast'
@@ -127,7 +126,6 @@ export function SessionDetail() {
   const totalTokens = events.reduce((acc, ev) => acc + (ev.tokens || 0), 0)
   const totalLatency = events.reduce((acc, ev) => acc + (ev.latency_ms || 0), 0)
   const terminalStages = AGENT_STEPS.filter(({ stage }) => ['completed', 'completed_with_errors', 'skipped'].includes(session?.stages?.[stage]?.status || '')).length
-  const pipelinePercent = Math.round((terminalStages / AGENT_STEPS.length) * 100)
 
   return (
     <div className="page-enter mx-auto max-w-[1500px] space-y-6">
@@ -140,11 +138,11 @@ export function SessionDetail() {
                 <Cpu className="w-5 h-5" />
               </span>
               <div>
-                <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
-                  {session?.name || 'API Security Session'}
+                <h1 className="text-xl font-semibold tracking-tight text-[var(--app-text)] sm:text-2xl">
+                  {session?.name || 'API Test Session'}
                 </h1>
-                <p className="mt-1 font-mono text-[11px] text-slate-400">
-                  <span className="text-slate-600">SESSION</span> {id} <span className="mx-1 text-slate-600">/</span> <span className="text-slate-600">TARGET</span> {session?.base_url || '—'}
+                <p className="mt-1 font-mono text-[11px] text-[var(--app-text-muted)]">
+                  <span>SESSION</span> {id} <span className="mx-1 text-[#b4bbc7]">/</span> <span>TARGET</span> {session?.base_url || '—'}
                 </p>
               </div>
             </div>
@@ -176,44 +174,44 @@ export function SessionDetail() {
         </div>
 
         {/* Live Metrics Row */}
-        <div className="mt-6 grid grid-cols-2 gap-4 border-t border-[#1e3a5f]/70 pt-5 sm:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-4 border-t pt-5 sm:grid-cols-4">
           <div>
-            <p className="text-xs text-zinc-400">Stream Status</p>
+            <p className="text-xs text-[var(--app-text-muted)]">Stream status</p>
             <p className="text-sm font-semibold flex items-center gap-1.5 mt-0.5">
               <span
                 className={`w-2 h-2 rounded-full ${
-                  isConnected ? 'bg-brand-600 animate-pulse' : 'bg-zinc-400'
+                  isConnected ? 'bg-[#25876b]' : 'bg-[#a8b0bd]'
                 }`}
               />
-              <span className="font-mono text-xs">{isConnected ? 'CONNECTED · SSE' : isCompleted ? 'STREAM COMPLETE' : 'RECONNECTING'}</span>
+              <span className="font-mono text-xs text-[var(--app-text)]">{isConnected ? 'CONNECTED · SSE' : isCompleted ? 'STREAM COMPLETE' : 'RECONNECTING'}</span>
             </p>
           </div>
           <div>
-            <p className="text-xs text-zinc-400">Events Streamed</p>
-            <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mt-0.5">
+            <p className="text-xs text-[var(--app-text-muted)]">Events streamed</p>
+            <p className="mt-0.5 text-sm font-semibold text-[var(--app-text)]">
               {events.length}
             </p>
           </div>
           <div>
-            <p className="text-xs text-zinc-400">Total Tokens</p>
-            <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mt-0.5 font-mono">
+            <p className="text-xs text-[var(--app-text-muted)]">Total tokens</p>
+            <p className="mt-0.5 font-mono text-sm font-semibold text-[var(--app-text)]">
               {totalTokens.toLocaleString()}
             </p>
           </div>
           <div>
-            <p className="text-xs text-zinc-400">Pipeline Latency</p>
-            <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mt-0.5 font-mono">
+            <p className="text-xs text-[var(--app-text-muted)]">Execution latency</p>
+            <p className="mt-0.5 font-mono text-sm font-semibold text-[var(--app-text)]">
               {(totalLatency / 1000).toFixed(2)}s
             </p>
           </div>
         </div>
-        <div className="mt-5 border-t border-[#1e3a5f]/50 pt-4">
+        <div className="mt-5 border-t pt-4">
           <div className="mb-2 flex items-center justify-between gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-[.16em] text-slate-500">Pipeline completion</span>
-            <span className="font-mono text-xs text-brand-300">{terminalStages}/{AGENT_STEPS.length} stages · {pipelinePercent}%</span>
+            <span className="font-mono text-[10px] uppercase tracking-[.12em] text-[var(--app-text-muted)]">Pipeline state</span>
+            <span className="font-mono text-xs text-brand-600">{terminalStages} of {AGENT_STEPS.length} stages complete</span>
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-[#020817] ring-1 ring-[#1e3a5f]/70">
-            <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400 transition-[width] duration-700" style={{ width: `${pipelinePercent}%` }} />
+          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--app-surface-muted)]">
+            <div className="h-full rounded-full bg-brand-600 transition-[width] duration-500" style={{ width: `${(terminalStages / AGENT_STEPS.length) * 100}%` }} />
           </div>
         </div>
       </Card>
@@ -265,163 +263,33 @@ export function SessionDetail() {
         )
       )}
 
-      {/* Main Grid: Stepper on Left, Event Stream on Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Agent Stepper */}
-        <div className="space-y-4">
-          <h2 className="flex items-center gap-2 text-base font-bold text-slate-100">
-            <Cpu className="h-5 w-5 text-brand-300" />
-            <span>Agent Pipeline</span>
-          </h2>
+      <Card className="p-5 sm:p-6">
+        <div className="mb-5 flex items-center justify-between gap-4"><div><h2 className="text-base font-semibold text-[var(--app-text)]">Execution workflow</h2><p className="mt-1 text-sm text-[var(--app-text-muted)]">Live state synchronized from the execution pipeline.</p></div><span className="font-mono text-xs text-[var(--app-text-muted)]">{terminalStages}/{AGENT_STEPS.length} complete</span></div>
+        <ol className="grid gap-3 md:grid-cols-6" aria-label="Session execution workflow">
+          {AGENT_STEPS.map((s, idx) => {
+            const stage = session?.stages?.[s.stage]; const status = stage?.status || 'pending'; const progress = stage?.progress;
+            const complete = status === 'completed' || status === 'skipped'; const failed = status === 'failed'; const waiting = status === 'waiting'; const active = status === 'running'; const partial = status === 'completed_with_errors';
+            const tone = failed ? 'border-[#e5b5ba] bg-[#fbeef0]' : waiting || partial ? 'border-[#ead2ad] bg-[#fbf3e5]' : active ? 'border-brand-300 bg-brand-50' : complete ? 'border-[#b9dfd1] bg-[#eaf6f1]' : 'border-[var(--app-border)] bg-[var(--app-surface)]';
+            const label = failed ? 'Failed' : waiting ? 'Awaiting approval' : partial ? 'Completed with errors' : active ? 'Running' : complete ? 'Completed' : 'Pending';
+            return <li key={s.id} className={`relative rounded-lg border p-3 transition-colors ${tone}`}>
+              {idx < AGENT_STEPS.length - 1 && <span className="absolute left-full top-7 hidden h-px w-3 bg-[var(--app-border)] md:block" />}
+              <div className="flex items-start justify-between gap-2"><span className="font-mono text-[10px] text-[var(--app-text-muted)]">{String(idx + 1).padStart(2, '0')}</span>{complete ? <CheckCircle className="h-4 w-4 text-[#25876b]" /> : failed ? <XCircle className="h-4 w-4 text-[#c65c65]" /> : waiting ? <WarningCircle className="h-4 w-4 text-[#b98232]" /> : active ? <Lightning className="h-4 w-4 text-brand-600" /> : <Clock className="h-4 w-4 text-[#a7afbc]" />}</div>
+              <p className="mt-4 text-xs font-semibold text-[var(--app-text)]">{s.name}</p><p className="mt-1 text-[11px] leading-4 text-[var(--app-text-muted)]">{label}</p>
+              {progress?.total ? <div className="mt-3"><div className="h-1 overflow-hidden rounded-full bg-white/80"><div className="h-full bg-brand-600 transition-[width] duration-300" style={{ width: `${Math.min(100, Math.round(progress.done / progress.total * 100))}%` }} /></div><p className="mt-1 font-mono text-[10px] text-[var(--app-text-muted)]">{progress.done}/{progress.total}</p></div> : active ? <div className="mt-3 h-1 overflow-hidden rounded-full bg-brand-100"><span className="block h-full w-1/2 animate-pulse rounded-full bg-brand-500" /></div> : null}
+              {waiting && s.stage === 'plan' && <Button size="sm" className="mt-3 w-full" onClick={() => setPlanModalOpen(true)}>Review plan</Button>}
+            </li>
+          })}
+        </ol>
+      </Card>
 
-          <div className="space-y-2">
-            {AGENT_STEPS.map((s, idx) => {
-              const stage = session?.stages?.[s.stage]
-              const stageStatus = stage?.status || 'pending'
-              const hasFailed = stageStatus === 'failed'
-              const isCompleted = stageStatus === 'completed' || stageStatus === 'skipped'
-              const isWaiting = stageStatus === 'waiting'
-              const isCurrent = stageStatus === 'running'
-              const progress = stage?.progress
-              const progressPct = progress?.total ? Math.min(100, Math.round(progress.done / progress.total * 100)) : 0
-
-              return (
-                <Card
-                  key={s.id}
-                  className={`stage-card p-4 transition-all ${
-                    hasFailed
-                      ? 'border-red-300 bg-red-50/40 dark:bg-red-950/30 shadow-sm'
-                      : isCurrent
-                      ? 'border-brand-600 bg-brand-50/40 dark:bg-brand-950/30 shadow-sm'
-                      : stageStatus === 'completed_with_errors'
-                      ? 'border-amber-300 bg-amber-50/40 dark:bg-amber-950/30 shadow-sm'
-                      : isCompleted
-                      ? 'border-zinc-200 dark:border-zinc-800'
-                      : 'border-zinc-100 dark:border-zinc-800/50 opacity-60'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-lg border font-mono text-[10px] ${isCompleted ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : isCurrent ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-200' : hasFailed ? 'border-rose-400/30 bg-rose-400/10 text-rose-300' : 'border-[#1e3a5f] bg-[#07152a] text-slate-500'}`}>{String(idx + 1).padStart(2, '0')}</span>
-                      {s.name}
-                    </span>
-                    {hasFailed ? (
-                      <span className="text-red-600 text-xs font-bold flex items-center gap-1">
-                        <XCircle className="w-3.5 h-3.5" />
-                        Failed
-                      </span>
-                    ) : isCompleted ? (
-                      <span className="flex items-center gap-1 text-xs font-bold text-emerald-400">
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        Done
-                      </span>
-                    ) : isWaiting ? (
-                      <span className="text-amber-600 text-xs font-bold flex items-center gap-1">
-                        <WarningCircle className="w-3.5 h-3.5" />
-                        Awaiting Approval
-                      </span>
-                    ) : stageStatus === 'completed_with_errors' ? (
-                      <span className="text-amber-600 text-xs font-bold">{progress?.failed || 0} of {progress?.total || 0} failed</span>
-                    ) : isCurrent ? (
-                      <span className="text-brand-600 text-xs font-bold flex items-center gap-1">
-                        <Lightning className="w-3.5 h-3.5 animate-pulse" />
-                        Active
-                      </span>
-                    ) : (
-                      <span className="text-zinc-400 text-xs">Pending</span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-zinc-500 mt-1">{s.desc}</p>
-                  {isCurrent && progress?.total ? (
-                    <div className="mt-2">
-                      <div className="h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
-                        <div className="h-full bg-brand-600 transition-all" style={{ width: `${progressPct}%` }} />
-                      </div>
-                      <p className="mt-1 text-[10px] text-zinc-500">{progress.done}/{progress.total} complete · {progress.failed} failed</p>
-                    </div>
-                  ) : null}
-                  {hasFailed && stage?.error ? <p className="mt-1 text-[11px] text-red-600">{stage.error}</p> : null}
-                  {isWaiting && s.stage === 'plan' ? (
-                    <Button size="sm" className="mt-2" onClick={() => setPlanModalOpen(true)}>Review plan</Button>
-                  ) : null}
-                </Card>
-              )
-            })}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <Card className="overflow-hidden p-0">
+          <div className="flex items-center justify-between border-b px-5 py-4"><div><h2 className="text-base font-semibold text-[var(--app-text)]">Live activity</h2><p className="mt-0.5 text-xs text-[var(--app-text-muted)]">Agent activity and execution metadata.</p></div><span className="font-mono text-xs text-[var(--app-text-muted)]">{events.length} events</span></div>
+          <div className="terminal-panel m-4 max-h-[420px] overflow-y-auto p-3">
+            {events.length === 0 ? <div className="py-12 text-center text-sm text-[#aeb6c4]"><Clock className="mx-auto mb-2 h-6 w-6" />Connecting to the event stream…</div> : events.map((ev, i) => <div key={i} className="border-b border-white/10 px-2 py-3 last:border-0"><div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px]"><span className="text-[#bbc4ff]">{ev.agent} / {ev.step}</span><span className="text-[#aeb6c4]">{new Date(ev.ts).toLocaleTimeString()}</span></div><p className="mt-1.5 text-sm leading-5 text-[#edf0f5]">{ev.message}</p><div className="mt-2 flex flex-wrap gap-2 font-mono text-[10px] text-[#aeb6c4]">{ev.tokens ? <span>{ev.tokens} tokens</span> : null}{ev.latency_ms ? <span>{ev.latency_ms}ms</span> : null}{ev.rag_used ? <span>RAG context</span> : null}{ev.repairs_used ? <span>{ev.repairs_used} repairs</span> : null}</div></div>)}
           </div>
-        </div>
-
-        {/* Right Column: Live Event Stream */}
-        <div className="space-y-4 lg:col-span-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              <Lightning className="w-5 h-5 text-brand-600" />
-              Live Agent Execution Trace
-            </h2>
-            <span className="text-xs text-zinc-400 font-mono">
-              {events.length} events logged
-            </span>
-          </div>
-
-          <div className="max-h-[calc(100vh-17rem)] space-y-3 overflow-y-auto pr-1">
-            {events.length === 0 && (
-              <Card className="p-8 text-center text-zinc-400">
-                <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Connecting to event stream...</p>
-              </Card>
-            )}
-
-            {events.map((ev, i) => (
-              <div
-                key={i}
-                className="glass-card animate-fade-in space-y-2 rounded-16 border border-[#1e3a5f]/70 p-4"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-lg border border-brand-300/20 bg-brand-300/10 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-brand-200">
-                      {ev.agent}
-                    </span>
-                    <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                      {ev.step}
-                    </span>
-                  </div>
-
-                  <span className="text-[11px] font-mono text-zinc-400">
-                    {new Date(ev.ts).toLocaleTimeString()}
-                  </span>
-                </div>
-
-                <p className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed font-sans">
-                  {ev.message}
-                </p>
-
-                {/* Metadata pills */}
-                <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-mono text-zinc-500">
-                  {ev.tokens ? (
-                    <span className="px-2 py-0.5 rounded-6 bg-zinc-100 dark:bg-zinc-800">
-                      {ev.tokens} tokens
-                    </span>
-                  ) : null}
-                  {ev.latency_ms ? (
-                    <span className="px-2 py-0.5 rounded-6 bg-zinc-100 dark:bg-zinc-800">
-                      {ev.latency_ms}ms
-                    </span>
-                  ) : null}
-                  {ev.rag_used && (
-                    <span className="px-2 py-0.5 rounded-6 bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300 flex items-center gap-1">
-                      <Database className="w-3 h-3" />
-                      RAG Context
-                    </span>
-                  )}
-                  {ev.repairs_used ? (
-                    <span className="px-2 py-0.5 rounded-6 bg-zinc-100 dark:bg-zinc-800">
-                      {ev.repairs_used} json repairs
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        </Card>
+        <Card className="p-5"><h2 className="text-base font-semibold text-[var(--app-text)]">Current session</h2><dl className="mt-5 space-y-4 text-sm"><div><dt className="text-xs text-[var(--app-text-muted)]">Mode</dt><dd className="mt-1 font-medium capitalize text-[var(--app-text)]">{session?.mode || 'local'}</dd></div><div><dt className="text-xs text-[var(--app-text-muted)]">Overall status</dt><dd className="mt-1 capitalize text-[var(--app-text)]">{session?.status?.replace('_', ' ') || 'Preparing'}</dd></div><div><dt className="text-xs text-[var(--app-text-muted)]">Current stage</dt><dd className="mt-1 text-[var(--app-text)]">{AGENT_STEPS.find(({ stage }) => session?.stages?.[stage]?.status === 'running')?.name || '—'}</dd></div></dl></Card>
       </div>
 
       {/* Plan Review Modal */}

@@ -39,8 +39,7 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
 
   useEffect(() => {
     const saved = localStorage.getItem('theme')
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const isDark = saved !== 'light' || (saved === null && prefersDark)
+    const isDark = saved === 'dark'
     document.documentElement.classList.toggle('dark', isDark)
     setDarkMode(isDark)
   }, [])
@@ -73,26 +72,26 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
   const page: { title: string; crumb?: string } = PAGE_TITLES.find(({ match }) => match(location.pathname)) ?? { title: 'API testing platform' }
 
   return (
-    <header className="glass-surface sticky top-0 z-30 border-x-0 border-t-0">
-      <div className="flex items-center justify-between h-16 px-4 lg:px-6">
+    <header className="sticky top-0 z-30 border-b bg-[var(--app-surface)]">
+      <div className="flex h-[68px] items-center justify-between px-4 lg:px-8">
         <div className="flex items-center gap-4">
           <button
             onClick={onMenuClick}
-            className="lg:hidden p-2 rounded-10 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            className="rounded-lg p-2 text-[var(--app-text-muted)] transition-colors hover:bg-[var(--app-surface-muted)] hover:text-[var(--app-text)] lg:hidden"
             aria-label="Open menu"
           >
             <List className="h-6 w-6" />
           </button>
           <div className="hidden sm:block">
-            {page.crumb && <p className="font-mono text-[10px] uppercase tracking-[.14em] text-slate-500">{page.crumb}</p>}
-            <h1 className="text-base font-bold leading-tight text-slate-100">{page.title}</h1>
+            {page.crumb && <p className="mb-0.5 text-xs text-[var(--app-text-muted)]">{page.crumb} <span className="mx-1 text-[#b5bbc6]">/</span> {page.title}</p>}
+            <h1 className="text-base font-semibold leading-tight text-[var(--app-text)]">{page.title}</h1>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             onClick={toggleDarkMode}
-            className="rounded-12 p-2 text-slate-500 transition-colors hover:bg-white/70 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+            className="rounded-lg p-2 text-[var(--app-text-muted)] transition-colors hover:bg-[var(--app-surface-muted)] hover:text-[var(--app-text)] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
             aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
@@ -101,37 +100,37 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
           <div className="relative" ref={profileRef}>
             <button
               onClick={() => setProfileOpen(!profileOpen)}
-              className="flex items-center gap-2 rounded-12 p-1.5 transition-colors hover:bg-white/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-slate-800"
+              className="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-[var(--app-surface-muted)] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
               aria-expanded={profileOpen}
               aria-haspopup="true"
             >
-              <div className="w-8 h-8 rounded-12 bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
-                <User className="h-5 w-5 text-brand-600 dark:text-brand-400" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100">
+                <User className="h-4 w-4 text-brand-700" />
               </div>
               <div className="hidden md:block text-left">
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{user?.full_name || 'User'}</p>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">{user?.email}</p>
+                <p className="text-sm font-medium text-[var(--app-text)]">{user?.full_name || 'User'}</p>
+                <p className="text-xs text-[var(--app-text-muted)]">{user?.email}</p>
               </div>
               <CaretDown className="h-4 w-4 text-zinc-400" />
             </button>
 
             {profileOpen && (
-              <div className="glass-surface absolute right-0 z-50 mt-2 w-52 rounded-16 py-1.5 animate-slide-down">
+              <div className="app-card absolute right-0 z-50 mt-2 w-52 rounded-xl py-1.5 shadow-lg animate-slide-down">
                 <Link
                   to="/settings"
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--app-text)] hover:bg-[var(--app-surface-muted)]"
                   onClick={() => setProfileOpen(false)}
                 >
                   <Gear className="h-4 w-4" />
                   Settings
                 </Link>
-                <hr className="my-1 border-zinc-200 dark:border-zinc-800" />
+                <hr className="my-1" />
                 <button
                   onClick={() => {
                     logout()
                     setProfileOpen(false)
                   }}
-                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-left"
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-[#c65c65] hover:bg-[var(--app-surface-muted)]"
                 >
                   <SignOut className="h-4 w-4" />
                   Log out

@@ -13,16 +13,16 @@ export function Layout({ children }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <div className="min-h-screen overflow-x-hidden">
+    <div className="app-shell overflow-x-hidden">
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed(!collapsed)}
       />
-      <div className={clsx('flex flex-col min-h-screen transition-all duration-300', collapsed ? 'lg:pl-20' : 'lg:pl-64')}>
+      <div className={clsx('flex min-h-screen flex-col transition-all duration-300', collapsed ? 'lg:pl-20' : 'lg:pl-[248px]')}>
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-7">
           {children || <Outlet />}
         </main>
       </div>

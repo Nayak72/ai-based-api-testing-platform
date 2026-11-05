@@ -14,7 +14,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+          <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-[var(--app-text)]">
             {label}
           </label>
         )}
@@ -22,10 +22,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={clsx(
-            'w-full rounded-12 border px-3 py-2 text-sm placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-colors',
+            'w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/20',
             error
-              ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20 bg-white dark:bg-zinc-900'
-              : 'border-zinc-300 bg-white focus:border-brand-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder-zinc-500'
+              ? 'border-[#c65c65] bg-[var(--app-surface)] focus:border-[#c65c65] focus:ring-red-500/20'
+              : 'border-[var(--app-border)] bg-[var(--app-surface)] text-[var(--app-text)] focus:border-brand-500'
           )}
           aria-invalid={error ? 'true' : 'false'}
           aria-describedby={error ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined}
@@ -37,7 +37,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           </p>
         )}
         {helperText && !error && (
-          <p id={`${inputId}-helper`} className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+          <p id={`${inputId}-helper`} className="mt-1.5 text-sm text-[var(--app-text-muted)]">
             {helperText}
           </p>
         )}

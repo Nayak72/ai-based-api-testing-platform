@@ -27,15 +27,21 @@ export function LoginForm() {
   }
 
   return (
-    <div className="page-enter flex min-h-screen items-center justify-center px-4">
+    <div className="page-enter grid min-h-screen bg-[var(--app-background)] lg:grid-cols-2">
+      <section className="relative hidden overflow-hidden bg-[#171c26] p-12 lg:flex lg:flex-col lg:justify-between">
+        <div><img src="/brand/api-platform-mark.svg" alt="" className="h-11 w-11" /><p className="mt-8 max-w-md text-3xl font-semibold leading-tight tracking-tight text-white">A deliberate workspace for API quality engineering.</p><p className="mt-4 max-w-sm text-sm leading-6 text-[#aab3c1]">Plan, test, inspect, and report on every interface with a single operational record.</p></div>
+        <div className="relative h-52 w-full max-w-lg"><span className="absolute left-[7%] top-[60%] h-3 w-3 rounded-full bg-[#9ca6ed]" /><span className="absolute left-[33%] top-[30%] h-3 w-3 rounded-full bg-[#9ca6ed]" /><span className="absolute left-[61%] top-[62%] h-3 w-3 rounded-full bg-[#9ca6ed]" /><span className="absolute right-[8%] top-[19%] h-3 w-3 rounded-full bg-[#9ca6ed]" /><i className="absolute left-[8%] top-[64%] h-px w-[28%] rotate-[-31deg] bg-[#5d6acb]" /><i className="absolute left-[35%] top-[34%] h-px w-[28%] rotate-[30deg] bg-[#5d6acb]" /><i className="absolute left-[63%] top-[58%] h-px w-[25%] rotate-[-40deg] bg-[#5d6acb]" /></div>
+        <p className="font-mono text-[10px] uppercase tracking-[.14em] text-[#778294]">API Testing Platform</p>
+      </section>
+      <div className="flex items-center justify-center px-4 py-12 sm:px-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <img src="/api-mark.svg" alt="" className="mx-auto mb-4 h-12 w-12" />
+          <img src="/brand/api-platform-mark.svg" alt="" className="mx-auto mb-4 h-12 w-12" />
           <h1 className="text-3xl font-bold tracking-tight text-zinc-50">API Testing Platform</h1>
           <p className="mt-2 text-zinc-500 dark:text-zinc-400">Sign in to your account</p>
         </div>
 
-        <div className="glass-card rounded-2xl border p-8">
+        <div className="app-card rounded-xl border p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
@@ -106,7 +112,7 @@ export function LoginForm() {
             </Link>
           </p>
         </div>
-      </div>
+      </div></div>
     </div>
   )
 }

@@ -131,21 +131,21 @@ export function QuickTest() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="mx-auto max-w-[1440px] space-y-6 page-enter">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+          <p className="page-kicker">Request workbench</p><h1 className="flex items-center gap-2 text-2xl font-semibold text-[var(--app-text)]">
             <PaperPlaneRight className="w-7 h-7 text-brand-600" />
             Quick Test
           </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+          <p className="mt-1 text-sm text-[var(--app-text-muted)]">
             Execute single target requests through safety guards to inspect headers, latencies, and responses.
           </p>
         </div>
 
         {/* Mode Selector */}
-        <div className="flex items-center p-1 bg-zinc-100 dark:bg-zinc-800 rounded-12 border border-zinc-200 dark:border-zinc-700 self-start">
+        <div className="flex items-center self-start rounded-lg border bg-[var(--app-surface)] p-1">
           <button
             type="button"
             onClick={() => {
@@ -154,8 +154,8 @@ export function QuickTest() {
             }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-8 text-xs font-medium transition-all ${
               mode === 'local'
-                ? 'bg-white dark:bg-zinc-900 text-brand-600 shadow-sm'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
+                ? 'bg-brand-50 text-brand-700 shadow-sm'
+                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'
             }`}
           >
             <ShieldCheck className="w-4 h-4" />
@@ -169,8 +169,8 @@ export function QuickTest() {
             }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-8 text-xs font-medium transition-all ${
               mode === 'online'
-                ? 'bg-white dark:bg-zinc-900 text-brand-600 shadow-sm'
-                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
+                ? 'bg-brand-50 text-brand-700 shadow-sm'
+                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'
             }`}
           >
             <Globe className="w-4 h-4" />

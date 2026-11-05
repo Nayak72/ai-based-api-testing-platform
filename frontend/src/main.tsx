@@ -7,7 +7,7 @@ import App from './App'
 import { AuthProvider } from './auth/AuthProvider'
 import './index.css'
 
-if (localStorage.getItem('theme') !== 'light') {
+if (localStorage.getItem('theme') === 'dark') {
   document.documentElement.classList.add('dark')
 }
 

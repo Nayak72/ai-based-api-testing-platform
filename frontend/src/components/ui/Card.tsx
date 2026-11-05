@@ -9,9 +9,9 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 export const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ className, variant = 'default', padding = 'md', children, ...props }, ref) => {
     const variants = {
-      default: 'glass-card rounded-16 border shadow-sm',
-      hover: 'glass-card rounded-16 border shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 hover:border-cyan-400/40',
-      bordered: 'glass-card rounded-16 border-2',
+      default: 'app-card rounded-xl border',
+      hover: 'app-card app-card-hover rounded-xl border',
+      bordered: 'app-card rounded-xl border-2',
     }
 
     const paddings = {
@@ -47,7 +47,7 @@ CardHeader.displayName = 'CardHeader'
 
 export const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingElement>>(
   ({ className, children, ...props }, ref) => (
-    <h3 ref={ref} className={clsx('text-lg font-semibold text-zinc-900 dark:text-zinc-50', className)} {...props}>
+    <h3 ref={ref} className={clsx('text-lg font-semibold text-[var(--app-text)]', className)} {...props}>
       {children}
     </h3>
   )
@@ -57,7 +57,7 @@ CardTitle.displayName = 'CardTitle'
 
 export const CardDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLParagraphElement>>(
   ({ className, children, ...props }, ref) => (
-    <p ref={ref} className={clsx('mt-1 text-sm text-zinc-500 dark:text-zinc-400', className)} {...props}>
+    <p ref={ref} className={clsx('mt-1 text-sm text-[var(--app-text-muted)]', className)} {...props}>
       {children}
     </p>
   )
@@ -77,7 +77,7 @@ CardContent.displayName = 'CardContent'
 
 export const CardFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => (
-    <div ref={ref} className={clsx('mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800', className)} {...props}>
+    <div ref={ref} className={clsx('mt-4 border-t pt-4', className)} {...props}>
       {children}
     </div>
   )

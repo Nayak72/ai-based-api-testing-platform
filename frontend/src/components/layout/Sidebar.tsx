@@ -15,15 +15,22 @@ import {
 } from '@phosphor-icons/react'
 import { clsx } from 'clsx'
 import { Button } from '../ui/Button'
+import { BrandLogo } from '../brand/BrandLogo'
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: SquaresFour },
-  { name: 'New Session', href: '/sessions/new', icon: RocketLaunch },
-  { name: 'Quick Test', href: '/quick-test', icon: PaperPlaneRight },
-  { name: 'Knowledge Base', href: '/knowledge-base', icon: Books },
-  { name: 'Specifications', href: '/specs', icon: Database },
-  { name: 'Test Runs', href: '/runs', icon: PlayCircle },
-  { name: 'Reports', href: '/reports', icon: FileText },
+  { label: 'Workspace', items: [
+    { name: 'Overview', href: '/', icon: SquaresFour },
+    { name: 'New Session', href: '/sessions/new', icon: RocketLaunch },
+    { name: 'Quick Test', href: '/quick-test', icon: PaperPlaneRight },
+  ] },
+  { label: 'API Assets', items: [
+    { name: 'Specifications', href: '/specs', icon: Database },
+    { name: 'Knowledge Base', href: '/knowledge-base', icon: Books },
+  ] },
+  { label: 'Results', items: [
+    { name: 'Test Runs', href: '/runs', icon: PlayCircle },
+    { name: 'Reports', href: '/reports', icon: FileText },
+  ] },
 ]
 
 interface SidebarProps {
@@ -49,29 +56,18 @@ export function Sidebar({ isOpen, onClose, collapsed = false, onToggleCollapse }
       />
       <aside
         className={clsx(
-          'glass-surface fixed inset-y-0 left-0 z-40 flex h-full flex-col border-y-0 border-l-0 transition-all duration-300',
-          collapsed ? 'w-20' : 'w-64',
+          'fixed inset-y-0 left-0 z-40 flex h-full flex-col border-y-0 border-l-0 border-r border-[#272e3b] bg-[#171c26] transition-all duration-300',
+          collapsed ? 'w-20' : 'w-[248px]',
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
         aria-label="Main navigation"
       >
-        <div className="flex h-[76px] flex-shrink-0 items-center justify-between border-b border-slate-200/70 px-4 dark:border-[#1e3a5f]/70">
-          {!collapsed && (
-            <Link to="/" className="flex items-center gap-2" aria-label="API Testing Platform">
-              <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-cyan-300/40 bg-cyan-300/10 shadow-[0_0_20px_rgba(0,245,255,.14)]">
-                <Database className="h-[18px] w-[18px] text-brand-300" />
-                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-[#060f1e] bg-emerald-400" />
-              </div>
-              <div className="min-w-0">
-                <span className="block truncate text-sm font-extrabold tracking-wide text-white">API Tester</span>
-                <span className="block font-mono text-[9px] uppercase tracking-[.12em] text-slate-500">AI Testing Workbench</span>
-              </div>
-            </Link>
-          )}
+        <div className="flex h-[68px] flex-shrink-0 items-center justify-between border-b border-[#272e3b] px-4">
+          <BrandLogo compact={collapsed} />
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
-              className={clsx('rounded-10 p-1.5 text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white', collapsed && 'mx-auto')}
+              className={clsx('rounded-lg p-1.5 text-[#98a1b1] transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400', collapsed && 'mx-auto')}
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               aria-expanded={!collapsed}
             >
@@ -80,50 +76,41 @@ export function Sidebar({ isOpen, onClose, collapsed = false, onToggleCollapse }
           )}
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4" aria-label="Main">
-          {navigation.map((item) => {
-            const Icon = item.icon
-            const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href))
-            return (
-              <NavLink
-                key={item.name}
-                to={item.href}
-                onClick={onClose}
-                className={({ isActive: active }) => clsx(
-                  'sidebar-link',
-                  active && 'sidebar-link-active',
-                  collapsed && 'justify-center px-2'
-                )}
-                aria-current={isActive ? 'page' : undefined}
-                title={collapsed ? item.name : undefined}
-              >
-                <Icon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+        <nav className="flex-1 overflow-y-auto px-3 py-3" aria-label="Main">
+          {navigation.map((group) => <div key={group.label} className="mb-1">
+            {!collapsed && <p className="sidebar-section">{group.label}</p>}
+            {collapsed && <div className="mx-2 my-3 h-px bg-white/10" />}
+            {group.items.map((item) => {
+              const Icon = item.icon
+              const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href))
+              return <NavLink key={item.name} to={item.href} onClick={onClose} className={({ isActive: active }) => clsx('sidebar-link', active && 'sidebar-link-active', collapsed && 'justify-center px-2')} aria-current={isActive ? 'page' : undefined} title={collapsed ? item.name : undefined}>
+                <Icon className="h-[18px] w-[18px] flex-shrink-0" aria-hidden="true" />
                 {!collapsed && <span>{item.name}</span>}
               </NavLink>
-            )
-          })}
+            })}
+          </div>)}
         </nav>
 
-        <div className="flex-shrink-0 border-t border-slate-200/70 p-3 dark:border-slate-700/70">
+        <div className="flex-shrink-0 border-t border-[#272e3b] p-3">
           {!collapsed ? (
             <div className="space-y-2">
               <div className="flex items-center gap-3 px-2 py-1.5">
-                <div className="w-8 h-8 rounded-12 bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center flex-shrink-0">
-                  <User className="h-5 w-5 text-brand-600 dark:text-brand-400" />
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#30394a]">
+                  <User className="h-4 w-4 text-[#c7cedb]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50 truncate">{user?.full_name || user?.email}</p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{user?.email}</p>
+                  <p className="truncate text-sm font-medium text-[#f4f5f7]">{user?.full_name || user?.email}</p>
+                  <p className="truncate text-xs text-[#98a1b1]">{user?.email}</p>
                 </div>
               </div>
               <div className="flex gap-2">
                 <Link to="/settings" className="flex-1" onClick={onClose}>
-                  <Button variant="ghost" size="sm" className="w-full">
+                  <Button variant="ghost" size="sm" className="w-full !text-[#c0c7d3] hover:!bg-white/5 hover:!text-white">
                     <Gear className="h-4 w-4" />
                     <span className="hidden sm:inline">Settings</span>
                   </Button>
                 </Link>
-                <Button variant="ghost" size="sm" className="flex-1" onClick={() => { logout(); onClose(); }}>
+                <Button variant="ghost" size="sm" className="flex-1 !text-[#c0c7d3] hover:!bg-white/5 hover:!text-white" onClick={() => { logout(); onClose(); }}>
                   <SignOut className="h-4 w-4" />
                   <span className="hidden sm:inline">Logout</span>
                 </Button>

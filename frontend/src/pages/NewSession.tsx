@@ -217,22 +217,22 @@ export function NewSession() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 page-enter">
+    <div className="mx-auto max-w-[1440px] space-y-6 page-enter">
       {/* Title */}
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+      <div className="page-header">
+        <div><p className="page-kicker">Configuration studio</p><h1 className="flex items-center gap-2 text-2xl font-semibold text-[var(--app-text)]">
           <RocketLaunch className="w-7 h-7 text-brand-600" />
           New Test Session
         </h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+        <p className="mt-1 text-sm text-[var(--app-text-muted)]">
           Configure an AI-powered security and functional audit session.
-        </p>
+        </p></div><div className="hidden rounded-lg border bg-[var(--app-surface)] px-3 py-2 text-xs text-[var(--app-text-muted)] lg:block"><span className="font-mono text-brand-600">STEP {step}/5</span><span className="mx-2 text-[#c0c6d0]">·</span>{step === 5 ? 'Ready to launch' : 'Configuration in progress'}</div>
       </div>
 
       {optionError && <ErrorState title="Session options could not be loaded" description="Specifications, catalog entries, or provider profiles may be unavailable. Retry before configuring a dependent option." onRetry={() => { void specsQuery.refetch(); void catalogQuery.refetch(); void providersQuery.refetch() }} />}
 
       {/* Stepper Progress */}
-      <ol className="grid grid-cols-5 gap-2 border-b border-slate-200 pb-4 dark:border-slate-800" aria-label="Session setup progress">
+      <ol className="grid grid-cols-5 gap-2 rounded-xl border bg-[var(--app-surface)] p-3 shadow-[var(--app-shadow)]" aria-label="Session setup progress">
         {[
           { num: 1, label: 'Mode' },
           { num: 2, label: 'Target & Spec' },
@@ -252,14 +252,14 @@ export function NewSession() {
                   ? 'bg-brand-600 text-white'
                   : step > s.num
                   ? 'bg-brand-100 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300'
-                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400'
+                  : 'bg-[var(--app-surface-muted)] text-[var(--app-text-muted)]'
               }`}
             >
               {step > s.num ? '✓' : s.num}
             </button>
             <span
               className={`text-xs font-medium hidden sm:inline ${
-                step === s.num ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-400'
+                step === s.num ? 'text-[var(--app-text)]' : 'text-[var(--app-text-muted)]'
               }`}
             >
               {s.label}
