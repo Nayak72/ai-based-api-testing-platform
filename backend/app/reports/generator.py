@@ -86,6 +86,8 @@ class ReportGenerator:
         }
 
         results_by_category = {}
+        endpoint_summary: dict[str, dict] = {}
+        attention_results: list[TestResultInDB] = []
         for r in results:
             cat = r.category
             if cat not in results_by_category:
@@ -102,14 +104,43 @@ class ReportGenerator:
             elif r.status == "blocked":
                 results_by_category[cat]["blocked"] += 1
 
+            endpoint = endpoint_summary.setdefault(r.endpoint_id, {
+                "total": 0, "passed": 0, "failed": 0, "errors": 0,
+                "blocked": 0, "duration_ms": 0,
+            })
+            endpoint["total"] += 1
+            endpoint["duration_ms"] += r.response.duration_ms or 0
+            if r.status == "passed":
+                endpoint["passed"] += 1
+            elif r.status == "failed":
+                endpoint["failed"] += 1
+            elif r.status == "error":
+                endpoint["errors"] += 1
+            elif r.status == "blocked":
+                endpoint["blocked"] += 1
+            if r.status in {"failed", "error", "blocked"}:
+                attention_results.append(r)
+
+        endpoint_rows = [
+            {"endpoint": endpoint, **data, "avg_duration_ms": round(data["duration_ms"] / data["total"], 1) if data["total"] else 0}
+            for endpoint, data in endpoint_summary.items()
+        ]
+        endpoint_rows.sort(key=lambda item: (item["failed"] + item["errors"], item["blocked"]), reverse=True)
+
         html = template.render(
             run=run,
             summary=summary,
             results_by_category=results_by_category,
+            endpoint_rows=endpoint_rows,
+            attention_results=attention_results[:50],
+            persisted_result_count=len(results),
             result_integrity=run.result_integrity,
             owasp_coverage=run.owasp_coverage,
             disclaimer=self.settings.report_disclaimer,
             generated_at=datetime.now().isoformat(),
+            # Embed the stylesheet so downloaded HTML is self-contained and
+            # renders identically outside the server's filesystem.
+            report_css=(Path(__file__).parent / "styles" / "report.css").read_text(encoding="utf-8"),
         )
 
         filename = f"run_{run.id}.html"

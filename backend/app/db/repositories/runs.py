@@ -18,7 +18,7 @@ class RunRepository:
         return self._collection
 
     async def create(self, run: TestRunCreate, user_id: ObjectId) -> TestRunInDB:
-        now = datetime.now()
+        now = datetime.now(UTC)
         doc = {
             **run.model_dump(),
             "user_id": user_id,
@@ -63,11 +63,12 @@ class RunRepository:
         return await self.collection.count_documents(query)
 
     async def update_status(self, run_id: ObjectId, status: str) -> TestRunInDB | None:
-        update = {"status": status, "updated_at": datetime.now()}
+        now = datetime.now(UTC)
+        update = {"status": status, "updated_at": now}
         if status == "running":
-            update["started_at"] = datetime.now()
+            update["started_at"] = now
         elif status in ("completed", "completed_with_errors", "failed", "cancelled"):
-            update["completed_at"] = datetime.now()
+            update["completed_at"] = now
         result = await self.collection.find_one_and_update({"_id": run_id}, {"$set": update}, return_document=True)
         return TestRunInDB(**result) if result else None
 
@@ -113,10 +114,10 @@ class RunRepository:
         )
 
     async def update_started_at(self, run_id: ObjectId) -> None:
-        await self.collection.update_one({"_id": run_id}, {"$set": {"started_at": datetime.now()}})
+        await self.collection.update_one({"_id": run_id}, {"$set": {"started_at": datetime.now(UTC)}})
 
     async def update_completed_at(self, run_id: ObjectId) -> None:
-        await self.collection.update_one({"_id": run_id}, {"$set": {"completed_at": datetime.now()}})
+        await self.collection.update_one({"_id": run_id}, {"$set": {"completed_at": datetime.now(UTC)}})
 
     async def update_config(self, run_id: ObjectId, config) -> TestRunInDB | None:
         result = await self.collection.find_one_and_update(

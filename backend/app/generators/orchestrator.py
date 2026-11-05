@@ -63,13 +63,17 @@ class GenerationOrchestrator:
         units = []
         for endpoint_id, category in requested:
             generator = self.generators[category]
-            deterministic_cases = self.deterministic.generate(
-                spec_id=spec_obj_id, endpoint=endpoint, category=category, subcategory=subcategory
-            )
+            endpoint = endpoint_by_id[endpoint_id]
             plan_item = next((item for item in plan_units if item.get("endpoint_id") == endpoint_id), {})
             planned_subcats = plan_item.get("subcategories") or []
             subcategories = planned_subcats or (generator.SUBCATEGORIES if (session_id and self._intensity(session_id) == "aggressive") else ["all"])
             for subcategory in subcategories:
+                deterministic_cases = self.deterministic.generate(
+                    spec_id=spec_obj_id,
+                    endpoint=endpoint,
+                    category=category,
+                    subcategory=subcategory,
+                )
                 unit = None
                 if session_id:
                     unit = await generation_unit_repository.ensure(
@@ -173,6 +177,27 @@ class GenerationOrchestrator:
                     if not call_task.done():
                         call_task.cancel()
                         await asyncio.gather(call_task, return_exceptions=True)
+                    # Contract-derived cases remain useful and safe when the
+                    # optional AI enhancement is unavailable or malformed.
+                    if deterministic_cases and isinstance(exc, (ProviderError, ValueError)):
+                        for testcase in deterministic_cases:
+                            testcase.session_id = session_id
+                            testcase.unit_id = unit_id
+                        if not dry_run:
+                            await test_case_repository.bulk_upsert(deterministic_cases)
+                        persisted_cases = await test_case_repository.list_by_session(
+                            session_id, endpoint_id=endpoint["endpoint_id"], category=category
+                        ) if session_id else []
+                        if unit:
+                            await generation_unit_repository.finish(
+                                ObjectId(unit_id), status="done", tokens=0,
+                                test_case_ids=[str(tc.id) for tc in persisted_cases if tc.unit_id == unit_id],
+                            )
+                        async with progress_lock:
+                            done += 1
+                        await report(category, "progress", f"Saved {len(deterministic_cases)} contract-derived tests after AI fallback: {endpoint['endpoint_id']}", {"done": done, "failed": failed, "total": total, "fallback": "deterministic"})
+                        logger.warning("AI generation fell back to contract-derived cases", endpoint_id=endpoint["endpoint_id"], category=category, error_type=type(exc).__name__)
+                        return
                     failed += 1
                     error_code = getattr(exc, "code", "unit_error")
                     error = str(exc)

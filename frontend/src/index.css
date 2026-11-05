@@ -44,7 +44,7 @@
   .btn-secondary { border: 1px solid var(--app-border); background: var(--app-surface); color: var(--app-text); } .btn-secondary:hover { background: var(--app-surface-muted); border-color: #d5d9e2; }
   .btn-ghost { color: var(--app-text-muted); background: transparent; } .btn-ghost:hover { color: var(--app-text); background: var(--app-surface-muted); }
   .btn-danger { color: #fff; background: var(--app-error); } .btn-danger:hover { background: #ae4b54; }
-  .input, input:not([type=checkbox]):not([type=radio]), select, textarea { border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); color: var(--app-text); }
+  .input, input:not([type=checkbox]):not([type=radio]), select, textarea { width: 100%; min-width: 0; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); color: var(--app-text); }
   .input::placeholder, input::placeholder, textarea::placeholder { color: #a8b0bd; }
   .input:focus, input:focus, select:focus, textarea:focus { border-color: var(--app-accent); outline: 0; box-shadow: 0 0 0 3px rgba(82,101,213,.13); }
   .sidebar-link { display: flex; min-height: 40px; align-items: center; gap: .7rem; border-radius: 8px; padding: .55rem .65rem; color: var(--app-sidebar-muted); font-size: .84rem; font-weight: 500; transition: background .18s ease, color .18s ease; }

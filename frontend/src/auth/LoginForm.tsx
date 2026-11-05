@@ -37,7 +37,7 @@ export function LoginForm() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/brand/api-platform-mark.svg" alt="" className="mx-auto mb-4 h-12 w-12" />
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-50">API Testing Platform</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">API Testing Platform</h1>
           <p className="mt-2 text-zinc-500 dark:text-zinc-400">Sign in to your account</p>
         </div>
 
@@ -54,7 +54,7 @@ export function LoginForm() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="input pl-10"
+                  className="input w-full pl-10"
                   placeholder="you@example.com"
                   required
                   autoComplete="email"
@@ -74,7 +74,7 @@ export function LoginForm() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="input pl-10 pr-10"
+                  className="input w-full pl-10 pr-10"
                   placeholder="••••••••"
                   required
                   autoComplete="current-password"

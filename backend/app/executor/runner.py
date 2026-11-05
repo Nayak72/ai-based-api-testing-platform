@@ -256,7 +256,12 @@ class RunOrchestrator:
             completed_at = datetime.now(UTC)
             run_after_execution = await run_repository.get_by_id(run_obj_id, user_obj_id)
             if run_after_execution and run_after_execution.started_at:
-                reconciled.duration_seconds = max(0.0, (completed_at - run_after_execution.started_at).total_seconds())
+                started_at = run_after_execution.started_at
+                # MongoDB deployments may return legacy timestamps without
+                # tzinfo. Treat those values as UTC at the application edge.
+                if started_at.tzinfo is None:
+                    started_at = started_at.replace(tzinfo=UTC)
+                reconciled.duration_seconds = max(0.0, (completed_at - started_at).total_seconds())
             await run_repository.replace_summary(run_obj_id, reconciled)
             await run_repository.reconcile_results(
                 run_obj_id,

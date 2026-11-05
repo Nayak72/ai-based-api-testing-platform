@@ -2,7 +2,7 @@ import os
 
 import structlog
 from bson import ObjectId
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
 from app.api.deps import CurrentUserId
@@ -20,11 +20,10 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
-@router.post("", response_model=ReportGenerateResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("", response_model=ReportGenerateResponse, status_code=status.HTTP_200_OK)
 async def generate_report(
     user_id: CurrentUserId,
     request: ReportGenerateRequest,
-    background_tasks: BackgroundTasks,
 ):
     try:
         run_obj_id = ObjectId(request.run_id)
@@ -39,9 +38,11 @@ async def generate_report(
         raise HTTPException(status_code=400, detail="Run must be in a reportable terminal state")
 
     generator = ReportGenerator()
-    background_tasks.add_task(generator.generate, run_obj_id, user_id, request.format)
+    # Generation is deliberately awaited. Returning before the file has been
+    # replaced allowed the client to reopen the previous report artifact.
+    await generator.generate(run_obj_id, user_id, request.format)
 
-    return {"message": "Report generation started", "run_id": request.run_id, "format": request.format}
+    return {"message": "Report generated", "run_id": request.run_id, "format": request.format}
 
 
 @router.get("", response_model=ReportListResponse)

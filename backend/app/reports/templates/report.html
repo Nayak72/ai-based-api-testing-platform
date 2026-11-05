@@ -4,52 +4,82 @@
 
 {% block content %}
 <div class="header">
-    <h1>{{ run.name }}</h1>
-    <div class="meta">
-        Run ID: {{ run.id }} | Spec ID: {{ run.spec_id }} | Triggered: {{ run.trigger }} | Started: {{ run.started_at.strftime('%Y-%m-%d %H:%M:%S') if run.started_at else 'N/A' }} | Completed: {{ run.completed_at.strftime('%Y-%m-%d %H:%M:%S') if run.completed_at else 'N/A' }}
+    <div class="header-kicker">API TESTING PLATFORM <span>EXECUTION REPORT</span></div>
+    <div class="header-main">
+        <div>
+            <h1>{{ run.name }}</h1>
+            <p class="header-subtitle">Evidence-backed API quality and security assessment</p>
+        </div>
+        <span class="badge badge-{{ run.status }}">{{ run.status|replace('_', ' ') }}</span>
+    </div>
+    <div class="meta report-meta">
+        <span><strong>Run</strong> {{ run.id }}</span><span><strong>Spec</strong> {{ run.spec_id }}</span><span><strong>Trigger</strong> {{ run.trigger }}</span><span><strong>Started</strong> {{ run.started_at.strftime('%d %b %Y, %H:%M') if run.started_at else 'N/A' }}</span>
     </div>
 </div>
 
-<div class="summary-grid">
-    <div class="summary-card total">
+<table class="summary-table"><tbody><tr>
+    <td class="summary-card total">
         <div class="value">{{ summary.total }}</div>
         <div class="label">Total Tests</div>
-    </div>
-    <div class="summary-card passed">
+    </td>
+    <td class="summary-card passed">
         <div class="value">{{ summary.passed }}</div>
         <div class="label">Passed</div>
-    </div>
-    <div class="summary-card failed">
+    </td>
+    <td class="summary-card failed">
         <div class="value">{{ summary.failed }}</div>
         <div class="label">Failed</div>
-    </div>
-    <div class="summary-card errors">
+    </td>
+    <td class="summary-card errors">
         <div class="value">{{ summary.errors }}</div>
         <div class="label">Errors</div>
-    </div>
-    <div class="summary-card skipped">
+    </td>
+    <td class="summary-card skipped">
         <div class="value">{{ summary.skipped }}</div>
         <div class="label">Skipped</div>
-    </div>
-    <div class="summary-card blocked">
+    </td>
+    <td class="summary-card blocked">
         <div class="value">{{ summary.blocked }}</div>
         <div class="label">Blocked</div>
-    </div>
-    <div class="summary-card duration">
+    </td>
+    <td class="summary-card duration">
         <div class="value">{{ "%.1f"|format(summary.duration_seconds) }}s</div>
         <div class="label">Duration</div>
-    </div>
+    </td>
+</tr></tbody></table>
+
+<div class="section technical-scope">
+    <div class="section-heading"><h2>Technical execution scope</h2><span class="badge badge-running">{{ run.config.mode }} mode</span></div>
+    <table class="facts-table"><tbody>
+        <tr><td>Target</td><td>{{ run.config.base_url_override or run.config.spec_base_url or 'Not recorded' }}</td><td>Concurrency</td><td>{{ run.config.concurrency }}</td></tr>
+        <tr><td>Timeout</td><td>{{ run.config.timeout_seconds }} seconds</td><td>Retry policy</td><td>{{ run.config.retry_failed }} attempt(s)</td></tr>
+        <tr><td>Categories</td><td colspan="3">{{ run.config.categories|join(', ') }}</td></tr>
+        <tr><td>Recorded results</td><td>{{ persisted_result_count }}</td><td>Run status</td><td>{{ run.status|replace('_', ' ')|title }}</td></tr>
+    </tbody></table>
 </div>
 
 <div class="section">
-    <h2>Result Storage Integrity</h2>
-    <p><strong>Status:</strong> {{ result_integrity.status|replace('_', ' ')|title }}</p>
-    <p>Selected: {{ result_integrity.selected_count }} · Executed: {{ result_integrity.executed_count }} · Persisted: {{ result_integrity.persisted_count }} · Summary: {{ result_integrity.summary_count }}</p>
+    <div class="section-heading"><h2>Result storage integrity</h2><span class="badge badge-{{ 'passed' if result_integrity.status == 'valid' else 'error' }}">{{ result_integrity.status|replace('_', ' ') }}</span></div>
+    <div class="integrity-grid"><div><span>Selected</span><strong>{{ result_integrity.selected_count }}</strong></div><div><span>Executed</span><strong>{{ result_integrity.executed_count }}</strong></div><div><span>Persisted</span><strong>{{ result_integrity.persisted_count }}</strong></div><div><span>Summary</span><strong>{{ result_integrity.summary_count }}</strong></div></div>
     {% if result_integrity.last_error %}<p><strong>Last persistence error:</strong> {{ result_integrity.last_error }}</p>{% endif %}
 </div>
 
 <div class="section">
-    <h2>Pass Rate: {{ "%.1f"|format(summary.pass_rate) }}%</h2>
+    <div class="section-heading"><h2>Execution outcome</h2><strong class="pass-rate">{{ "%.1f"|format(summary.pass_rate) }}% pass rate</strong></div>
+</div>
+
+<div class="section">
+    <div class="section-heading"><h2>Endpoint execution matrix</h2><span class="muted-note">Aggregated persisted evidence</span></div>
+    <table class="results-table"><thead><tr><th>Endpoint</th><th>Tests</th><th>Passed</th><th>Failed</th><th>Errors</th><th>Blocked</th><th>Avg latency</th></tr></thead><tbody>
+    {% for row in endpoint_rows %}<tr><td><code>{{ row.endpoint }}</code></td><td>{{ row.total }}</td><td>{{ row.passed }}</td><td>{{ row.failed }}</td><td>{{ row.errors }}</td><td>{{ row.blocked }}</td><td>{{ row.avg_duration_ms }} ms</td></tr>{% else %}<tr><td colspan="7">No persisted results are available. The summary is retained, but endpoint-level evidence could not be rendered.</td></tr>{% endfor %}
+    </tbody></table>
+</div>
+
+<div class="section">
+    <div class="section-heading"><h2>Findings requiring attention</h2><span class="muted-note">Failed, error, and blocked outcomes</span></div>
+    <table class="results-table"><thead><tr><th>Endpoint</th><th>Category</th><th>Outcome</th><th>HTTP</th><th>Diagnostic</th></tr></thead><tbody>
+    {% for result in attention_results %}<tr><td><code>{{ result.endpoint_id }}</code></td><td>{{ result.category }}</td><td><span class="badge badge-{{ result.status }}">{{ result.status }}</span></td><td>{{ result.response.status_code or '—' }}</td><td>{{ result.error or (result.llm_analysis.summary if result.llm_analysis else 'Assertion or expected-response mismatch') }}</td></tr>{% else %}<tr><td colspan="5">No failed, error, or blocked persisted results were found.</td></tr>{% endfor %}
+    </tbody></table>
 </div>
 
 <div class="section">

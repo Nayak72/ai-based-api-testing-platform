@@ -680,36 +680,36 @@ export function NewSession() {
 
           <div className="rounded-12 border border-zinc-200 dark:border-zinc-800 p-4 space-y-3 bg-zinc-50 dark:bg-zinc-950">
             <div className="flex justify-between text-xs">
-              <span className="text-zinc-500">Execution Mode:</span>
-              <span className="font-semibold uppercase text-brand-600">{mode}</span>
+              <span className="text-zinc-600 dark:text-zinc-300">Execution Mode:</span>
+              <span className="font-semibold uppercase text-brand-700 dark:text-brand-300">{mode}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-zinc-500">Target Base URL:</span>
+              <span className="text-zinc-600 dark:text-zinc-300">Target Base URL:</span>
               <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">{baseUrl}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-zinc-500">Pipeline Type:</span>
-              <span className="font-semibold">{agentic ? 'Autonomous Agentic (SSE)' : 'Linear Pipeline'}</span>
+              <span className="text-zinc-600 dark:text-zinc-300">Pipeline Type:</span>
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">{agentic ? 'Autonomous Agentic (SSE)' : 'Linear Pipeline'}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-zinc-500">Categories:</span>
-              <span className="font-semibold">{categories.join(', ')}</span>
+              <span className="text-zinc-600 dark:text-zinc-300">Categories:</span>
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">{categories.join(', ')}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-zinc-500">Intensity:</span>
-              <span className="font-semibold capitalize">{intensity}</span>
+              <span className="text-zinc-600 dark:text-zinc-300">Intensity:</span>
+              <span className="font-semibold capitalize text-zinc-900 dark:text-zinc-100">{intensity}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-zinc-500">Primary Auth:</span>
-              <span className="font-semibold capitalize">{authType === 'none' ? 'Not configured' : `${authType.replace('_', ' ')} configured`}</span>
+              <span className="text-zinc-600 dark:text-zinc-300">Primary Auth:</span>
+              <span className="font-semibold capitalize text-zinc-900 dark:text-zinc-100">{authType === 'none' ? 'Not configured' : `${authType.replace('_', ' ')} configured`}</span>
             </div>
             <div className="flex justify-between gap-4 text-xs">
-              <span className="text-zinc-500">Secondary identity:</span>
-              <span className="font-semibold capitalize">{secondaryAuthType === 'none' ? 'Not configured' : `${secondaryAuthType.replace('_', ' ')} configured`}</span>
+              <span className="text-zinc-600 dark:text-zinc-300">Secondary identity:</span>
+              <span className="font-semibold capitalize text-zinc-900 dark:text-zinc-100">{secondaryAuthType === 'none' ? 'Not configured' : `${secondaryAuthType.replace('_', ' ')} configured`}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-zinc-500">Authorization:</span>
-              <span className="font-semibold">{mode === 'online' ? (ownedAttestation ? 'Attested' : 'Not attested') : 'Local mode policy'}</span>
+              <span className="text-zinc-600 dark:text-zinc-300">Authorization:</span>
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">{mode === 'online' ? (ownedAttestation ? 'Attested' : 'Not attested') : 'Local mode policy'}</span>
             </div>
           </div>
 

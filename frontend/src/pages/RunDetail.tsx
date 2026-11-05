@@ -100,7 +100,7 @@ export function RunDetail() {
   const handleGenerateReport = async () => {
     try {
       await generateReportMutation.mutateAsync({ runId: runId!, format: reportFormat })
-      toast.success('Report generation started')
+      toast.success('Report generated')
       setReportDialogOpen(false)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to generate report')
@@ -201,7 +201,7 @@ export function RunDetail() {
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.id}</p>
                     <Badge variant={item.assessment === 'assessed' ? 'success' : item.assessment === 'partially_assessed' ? 'warning' : 'gray'} size="sm">
-                      {item.assessment.replaceAll('_', ' ')}
+                      {item.assessment.replace(/_/g, ' ')}
                     </Badge>
                   </div>
                   <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{item.name}</p>

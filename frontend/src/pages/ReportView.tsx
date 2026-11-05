@@ -22,8 +22,8 @@ export function ReportView() {
     setReportGenerating(true)
     try {
       await generateReportMutation.mutateAsync({ runId: runId!, format: reportFormat })
-      toast.success('Report generation started')
-      setTimeout(() => refetchReport(), 2000)
+      await refetchReport()
+      toast.success('Report generated')
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to generate report')
     } finally {

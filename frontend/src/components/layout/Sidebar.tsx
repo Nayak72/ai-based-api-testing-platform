@@ -62,12 +62,12 @@ export function Sidebar({ isOpen, onClose, collapsed = false, onToggleCollapse }
         )}
         aria-label="Main navigation"
       >
-        <div className="flex h-[68px] flex-shrink-0 items-center justify-between border-b border-[#272e3b] px-4">
+        <div className={clsx('relative flex h-[68px] flex-shrink-0 items-center border-b border-[#272e3b]', collapsed ? 'justify-center px-2' : 'justify-between px-4')}>
           <BrandLogo compact={collapsed} />
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
-              className={clsx('rounded-lg p-1.5 text-[#98a1b1] transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400', collapsed && 'mx-auto')}
+              className={clsx('rounded-lg p-1.5 text-[#98a1b1] transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400', collapsed && 'absolute right-1.5')}
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               aria-expanded={!collapsed}
             >
