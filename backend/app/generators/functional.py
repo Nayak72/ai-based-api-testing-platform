@@ -12,7 +12,7 @@ logger = structlog.get_logger()
 class FunctionalGenerator(BaseGenerator):
     CATEGORY = "functional"
     SUBCATEGORIES = ["happy_path", "optional_params", "enum_values", "pagination"]
-    PROMPT_VERSION = "v1"
+    PROMPT_VERSION = "v2"
 
     def get_system_prompt(self) -> str:
         return """You are an expert API testing engineer. Generate functional test cases in STRICT JSON format matching the provided schema. No explanations, no markdown, only valid JSON.
@@ -38,7 +38,7 @@ Output format: {"test_cases": [...]}"""
 class EdgeGenerator(BaseGenerator):
     CATEGORY = "edge"
     SUBCATEGORIES = ["boundary_values", "string_length", "array_size", "datetime_edge", "numeric_precision"]
-    PROMPT_VERSION = "v1"
+    PROMPT_VERSION = "v2"
 
     def get_system_prompt(self) -> str:
         return """You are an expert API testing engineer. Generate edge/boundary test cases in STRICT JSON format matching the provided schema. No explanations, no markdown, only valid JSON.
@@ -74,7 +74,7 @@ class MalformedGenerator(BaseGenerator):
         "path_traversal",
         "duplicate_params",
     ]
-    PROMPT_VERSION = "v1"
+    PROMPT_VERSION = "v2"
 
     def get_system_prompt(self) -> str:
         return """You are an expert API security and testing engineer. Generate malformed/negative test cases in STRICT JSON format matching the provided schema. No explanations, no markdown, only valid JSON.
@@ -124,7 +124,7 @@ class SecurityGenerator(BaseGenerator):
         "inventory": "API9:2023",
         "unsafe_consumption": "API10:2023",
     }
-    PROMPT_VERSION = "v1"
+    PROMPT_VERSION = "v2"
 
     def get_system_prompt(self) -> str:
         return """You are an expert API security engineer. Generate OWASP API Top 10 2023 security test cases in STRICT JSON format matching the provided schema. No explanations, no markdown, only valid JSON.

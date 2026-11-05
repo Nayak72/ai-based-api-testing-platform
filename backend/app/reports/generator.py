@@ -80,6 +80,7 @@ class ReportGenerator:
             "failed": run.summary.failed,
             "errors": run.summary.errors,
             "skipped": run.summary.skipped,
+            "blocked": run.summary.blocked,
             "duration_seconds": run.summary.duration_seconds,
             "pass_rate": (run.summary.passed / run.summary.total * 100) if run.summary.total > 0 else 0,
         }
@@ -88,7 +89,7 @@ class ReportGenerator:
         for r in results:
             cat = r.category
             if cat not in results_by_category:
-                results_by_category[cat] = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0, "details": []}
+                results_by_category[cat] = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0, "blocked": 0, "details": []}
             results_by_category[cat]["details"].append(r)
             if r.status == "passed":
                 results_by_category[cat]["passed"] += 1
@@ -98,11 +99,15 @@ class ReportGenerator:
                 results_by_category[cat]["errors"] += 1
             elif r.status == "skipped":
                 results_by_category[cat]["skipped"] += 1
+            elif r.status == "blocked":
+                results_by_category[cat]["blocked"] += 1
 
         html = template.render(
             run=run,
             summary=summary,
             results_by_category=results_by_category,
+            result_integrity=run.result_integrity,
+            owasp_coverage=run.owasp_coverage,
             disclaimer=self.settings.report_disclaimer,
             generated_at=datetime.now().isoformat(),
         )

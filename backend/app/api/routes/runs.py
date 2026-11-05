@@ -11,6 +11,8 @@ from app.api.schemas.runs import (
     RunListResponse,
     RunResponse,
     RunSummarySchema,
+    ResultStorageIntegritySchema,
+    OwaspCoverageAssessmentSchema,
 )
 from app.db.repositories import result_repository, run_repository, spec_repository
 from app.executor.runner import RunOrchestrator
@@ -18,6 +20,21 @@ from app.executor.runner import RunOrchestrator
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+def _run_response(run) -> RunResponse:
+    return RunResponse(
+        id=str(run.id), spec_id=str(run.spec_id), user_id=str(run.user_id), name=run.name,
+        trigger=run.trigger, status=run.status, config=RunConfigSchema(**run.config.model_dump()),
+        summary=RunSummarySchema(**run.summary.model_dump()),
+        result_integrity=ResultStorageIntegritySchema(**run.result_integrity.model_dump()),
+        owasp_coverage=[OwaspCoverageAssessmentSchema(**item.model_dump()) for item in run.owasp_coverage],
+        started_at=run.started_at, completed_at=run.completed_at, created_at=run.created_at,
+        analysis_status=run.analysis_status, analysis_total=run.analysis_total,
+        analysis_completed=run.analysis_completed, analysis_error_count=run.analysis_error_count,
+        analysis_error=run.analysis_error, analysis_started_at=run.analysis_started_at,
+        analysis_completed_at=run.analysis_completed_at,
+    )
 
 
 @router.post("", response_model=RunResponse, status_code=status.HTTP_201_CREATED)
@@ -59,19 +76,7 @@ async def create_run(
 
     logger.info("Run created", run_id=str(run.id), user_id=str(user_id), spec_id=request.spec_id)
 
-    return RunResponse(
-        id=str(run.id),
-        spec_id=str(run.spec_id),
-        user_id=str(run.user_id),
-        name=run.name,
-        trigger=run.trigger,
-        status=run.status,
-        config=RunConfigSchema(**run.config.model_dump()),
-        summary=RunSummarySchema(**run.summary.model_dump()),
-        started_at=run.started_at,
-        completed_at=run.completed_at,
-        created_at=run.created_at,
-    )
+    return _run_response(run)
 
 
 @router.get("", response_model=RunListResponse)
@@ -88,29 +93,7 @@ async def list_runs(
     total = await run_repository.count_by_user(user_id, spec_obj_id, status_filter)
 
     return RunListResponse(
-        runs=[
-            RunResponse(
-                id=str(r.id),
-                spec_id=str(r.spec_id),
-                user_id=str(r.user_id),
-                name=r.name,
-                trigger=r.trigger,
-                status=r.status,
-                config=RunConfigSchema(**r.config.model_dump()),
-                summary=RunSummarySchema(**r.summary.model_dump()),
-                started_at=r.started_at,
-                completed_at=r.completed_at,
-                created_at=r.created_at,
-                analysis_status=r.analysis_status,
-                analysis_total=r.analysis_total,
-                analysis_completed=r.analysis_completed,
-                analysis_error_count=r.analysis_error_count,
-                analysis_error=r.analysis_error,
-                analysis_started_at=r.analysis_started_at,
-                analysis_completed_at=r.analysis_completed_at,
-            )
-            for r in runs
-        ],
+        runs=[_run_response(run) for run in runs],
         total=total,
         page=page,
         page_size=page_size,
@@ -128,26 +111,7 @@ async def get_run(run_id: str, user_id: CurrentUserId):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    return RunResponse(
-        id=str(run.id),
-        spec_id=str(run.spec_id),
-        user_id=str(run.user_id),
-        name=run.name,
-        trigger=run.trigger,
-        status=run.status,
-        config=RunConfigSchema(**run.config.model_dump()),
-        summary=RunSummarySchema(**run.summary.model_dump()),
-        started_at=run.started_at,
-        completed_at=run.completed_at,
-        created_at=run.created_at,
-        analysis_status=run.analysis_status,
-        analysis_total=run.analysis_total,
-        analysis_completed=run.analysis_completed,
-        analysis_error_count=run.analysis_error_count,
-        analysis_error=run.analysis_error,
-        analysis_started_at=run.analysis_started_at,
-        analysis_completed_at=run.analysis_completed_at,
-    )
+    return _run_response(run)
 
 
 @router.get("/{run_id}/results", response_model=ResultListResponse)
@@ -250,19 +214,7 @@ async def cancel_run(run_id: str, user_id: CurrentUserId):
     await orchestrator.cancel_run(obj_id)
 
     run = await run_repository.get_by_id(obj_id, user_id)
-    return RunResponse(
-        id=str(run.id),
-        spec_id=str(run.spec_id),
-        user_id=str(run.user_id),
-        name=run.name,
-        trigger=run.trigger,
-        status=run.status,
-        config=RunConfigSchema(**run.config.model_dump()),
-        summary=RunSummarySchema(**run.summary.model_dump()),
-        started_at=run.started_at,
-        completed_at=run.completed_at,
-        created_at=run.created_at,
-    )
+    return _run_response(run)
 
 
 @router.post("/{run_id}/retry-failed", response_model=RunResponse)
@@ -280,26 +232,14 @@ async def retry_failed(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    if run.status not in ("completed", "failed"):
+    if run.status not in ("completed", "completed_with_errors", "failed", "cancelled"):
         raise HTTPException(status_code=400, detail=f"Cannot retry run in status: {run.status}")
 
     orchestrator = RunOrchestrator()
     background_tasks.add_task(orchestrator.retry_failed, obj_id)
 
     run = await run_repository.get_by_id(obj_id, user_id)
-    return RunResponse(
-        id=str(run.id),
-        spec_id=str(run.spec_id),
-        user_id=str(run.user_id),
-        name=run.name,
-        trigger=run.trigger,
-        status=run.status,
-        config=RunConfigSchema(**run.config.model_dump()),
-        summary=RunSummarySchema(**run.summary.model_dump()),
-        started_at=run.started_at,
-        completed_at=run.completed_at,
-        created_at=run.created_at,
-    )
+    return _run_response(run)
 
 
 @router.post("/{run_id}/analyze", status_code=status.HTTP_202_ACCEPTED)

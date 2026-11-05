@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
 
-from app.db.models import RunSummary, TestRunCreate, TestRunInDB
+from app.db.models import ResultStorageIntegrity, RunSummary, TestRunCreate, TestRunInDB
 from app.db.mongo import get_collection
 
 
@@ -24,6 +24,8 @@ class RunRepository:
             "user_id": user_id,
             "status": "pending",
             "summary": RunSummary().model_dump(),
+            "result_integrity": ResultStorageIntegrity().model_dump(),
+            "owasp_coverage": [],
             "started_at": None,
             "completed_at": None,
             "created_at": now,
@@ -72,8 +74,43 @@ class RunRepository:
     async def increment_summary(self, run_id: ObjectId, field: str, amount: int = 1) -> None:
         await self.collection.update_one({"_id": run_id}, {"$inc": {f"summary.{field}": amount}})
 
+    async def replace_summary(self, run_id: ObjectId, summary: RunSummary) -> None:
+        await self.collection.update_one({"_id": run_id}, {"$set": {"summary": summary.model_dump()}})
+
     async def set_duration(self, run_id: ObjectId, duration_seconds: float) -> None:
         await self.collection.update_one({"_id": run_id}, {"$set": {"summary.duration_seconds": duration_seconds}})
+
+    async def reconcile_results(
+        self,
+        run_id: ObjectId,
+        *,
+        selected_count: int,
+        executed_count: int,
+        persisted_count: int,
+        summary_count: int,
+        insertion_errors: int = 0,
+        last_error: str | None = None,
+    ) -> None:
+        if insertion_errors and persisted_count == 0:
+            integrity_status = "failed"
+        elif insertion_errors or persisted_count < executed_count:
+            integrity_status = "partially_persisted"
+        elif persisted_count != summary_count:
+            integrity_status = "inconsistent"
+        else:
+            integrity_status = "valid"
+        await self.collection.update_one(
+            {"_id": run_id},
+            {"$set": {"result_integrity": {
+                "status": integrity_status,
+                "selected_count": selected_count,
+                "executed_count": executed_count,
+                "persisted_count": persisted_count,
+                "summary_count": summary_count,
+                "last_error": last_error,
+                "reconciled_at": datetime.now(UTC),
+            }}},
+        )
 
     async def update_started_at(self, run_id: ObjectId) -> None:
         await self.collection.update_one({"_id": run_id}, {"$set": {"started_at": datetime.now()}})

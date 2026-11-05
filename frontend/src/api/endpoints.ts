@@ -100,8 +100,31 @@ export interface Run {
     failed: number
     errors: number
     skipped: number
+    blocked: number
     duration_seconds: number
   }
+  result_integrity: {
+    status: 'valid' | 'inconsistent' | 'partially_persisted' | 'failed'
+    selected_count: number
+    executed_count: number
+    persisted_count: number
+    summary_count: number
+    last_error: string | null
+    reconciled_at: string | null
+  }
+  owasp_coverage: Array<{
+    id: string
+    name: string
+    assessment: 'assessed' | 'partially_assessed' | 'not_assessed' | 'blocked_by_execution_policy'
+    applicable_endpoints: string[]
+    generated_test_cases: number
+    executed_test_cases: number
+    passed_checks: number
+    failed_checks: number
+    blocked_checks: number
+    not_assessed_reason: string | null
+    evidence_result_ids: string[]
+  }>
   started_at: string | null
   completed_at: string | null
   created_at: string
@@ -138,6 +161,14 @@ export interface Result {
   assertions: Array<{
     assertion: any
     result: boolean
+    name?: string | null
+    assertion_type?: string | null
+    path?: string | null
+    operator?: string | null
+    expected?: any
+    actual?: any
+    message?: string | null
+    evidence?: any
   }>
   error: string | null
   llm_analysis: any | null

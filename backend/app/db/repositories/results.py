@@ -33,6 +33,10 @@ class ResultRepository:
         result = await self.collection.insert_many(docs)
         return len(result.inserted_ids)
 
+    async def count_distinct_test_cases(self, run_id: ObjectId) -> int:
+        values = await self.collection.distinct("test_case_id", {"run_id": run_id})
+        return len(values)
+
     async def get_by_id(self, result_id: ObjectId) -> TestResultInDB | None:
         doc = await self.collection.find_one({"_id": result_id})
         return TestResultInDB(**doc) if doc else None
@@ -72,6 +76,18 @@ class ResultRepository:
             {"_id": result_id}, {"$set": {"status": status}}, return_document=True
         )
         return TestResultInDB(**result) if result else None
+
+    async def replace_execution(self, result_id: ObjectId, result: TestResultBase, *, attempt: int) -> TestResultInDB | None:
+        """Replace all execution evidence when a failed case is retried."""
+        document = result.model_dump(by_alias=True)
+        document.pop("run_id", None)
+        document.pop("test_case_id", None)
+        document["retried"] = True
+        document["attempt"] = attempt
+        updated = await self.collection.find_one_and_update(
+            {"_id": result_id}, {"$set": document}, return_document=True
+        )
+        return TestResultInDB(**updated) if updated else None
 
 
 result_repository = ResultRepository()

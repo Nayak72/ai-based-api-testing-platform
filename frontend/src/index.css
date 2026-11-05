@@ -17,6 +17,7 @@
     --app-background: #202530; --app-surface: #282e3a; --app-surface-muted: #232934;
     --app-text: #f2f4f7; --app-text-muted: #a8b0bd; --app-border: #394150;
     --app-accent: #8795ed; --app-accent-hover: #a0abf3; --app-accent-soft: rgba(135,149,237,.16);
+    --app-success: #72c6a9; --app-warning: #e0b879; --app-error: #ec98a0;
     --app-success-soft: rgba(37,135,107,.18); --app-warning-soft: rgba(185,130,50,.18); --app-error-soft: rgba(198,92,101,.18);
     --app-shadow: 0 1px 2px rgba(0,0,0,.12), 0 12px 26px rgba(0,0,0,.13);
   }

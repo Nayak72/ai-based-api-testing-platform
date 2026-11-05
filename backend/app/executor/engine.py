@@ -140,7 +140,14 @@ class TestExecutor:
         headers = dict(test_case.request.headers)
         query_params = dict(test_case.request.query_params)
 
-        auth_config = run_context.config.auth_override or run_context.config.spec_auth_config
+        # Security cases can explicitly select the second supplied identity.
+        # This is only meaningful where the test plan has controlled fixtures;
+        # arbitrary identifiers are never treated as proof of cross-user access.
+        use_secondary_identity = test_case.metadata.agent == "secondary" or headers.pop("x-test-identity", "").lower() == "secondary"
+        auth_config = (
+            run_context.config.auth_secondary if use_secondary_identity and run_context.config.auth_secondary
+            else run_context.config.auth_override or run_context.config.spec_auth_config
+        )
         if auth_config:
             token = auth_config.token
             if not token and auth_config.token_env_var:

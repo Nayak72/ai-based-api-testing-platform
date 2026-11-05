@@ -41,7 +41,32 @@ class RunSummarySchema(BaseModel):
     failed: int = 0
     errors: int = 0
     skipped: int = 0
+    blocked: int = 0
     duration_seconds: float = 0.0
+
+
+class ResultStorageIntegritySchema(BaseModel):
+    status: Literal["valid", "inconsistent", "partially_persisted", "failed"] = "valid"
+    selected_count: int = 0
+    executed_count: int = 0
+    persisted_count: int = 0
+    summary_count: int = 0
+    last_error: str | None = None
+    reconciled_at: datetime | None = None
+
+
+class OwaspCoverageAssessmentSchema(BaseModel):
+    id: str
+    name: str
+    assessment: Literal["assessed", "partially_assessed", "not_assessed", "blocked_by_execution_policy"]
+    applicable_endpoints: list[str] = Field(default_factory=list)
+    generated_test_cases: int = 0
+    executed_test_cases: int = 0
+    passed_checks: int = 0
+    failed_checks: int = 0
+    blocked_checks: int = 0
+    not_assessed_reason: str | None = None
+    evidence_result_ids: list[str] = Field(default_factory=list)
 
 
 class RunCreateRequest(BaseModel):
@@ -60,6 +85,8 @@ class RunResponse(BaseModel):
     status: str
     config: RunConfigSchema
     summary: RunSummarySchema
+    result_integrity: ResultStorageIntegritySchema = Field(default_factory=ResultStorageIntegritySchema)
+    owasp_coverage: list[OwaspCoverageAssessmentSchema] = Field(default_factory=list)
     started_at: datetime | None
     completed_at: datetime | None
     created_at: datetime

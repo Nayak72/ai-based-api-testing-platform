@@ -24,18 +24,69 @@ def evaluate_assertions(
     # Always evaluate status code if expected_status_code is provided
     if expected_status_code is not None:
         status_assertion = Assertion(type="status_code", path="", operator="eq", value=expected_status_code)
-        result = _evaluate_single_assertion(status_assertion, status_code, headers, body, response_schema, duration_ms)
-        results.append(AssertionResult(assertion=status_assertion, result=result))
+        results.append(_build_result(status_assertion, status_code, headers, body, response_schema, duration_ms))
 
     for assertion in assertions:
         try:
-            result = _evaluate_single_assertion(assertion, status_code, headers, body, response_schema, duration_ms)
-            results.append(AssertionResult(assertion=assertion, result=result))
+            results.append(_build_result(assertion, status_code, headers, body, response_schema, duration_ms))
         except Exception as e:
             logger.warning("Assertion evaluation error", assertion=assertion.model_dump(), error=str(e))
-            results.append(AssertionResult(assertion=assertion, result=False))
+            results.append(AssertionResult(
+                assertion=assertion, result=False, name=_assertion_name(assertion),
+                assertion_type=assertion.type, path=assertion.path, operator=assertion.operator,
+                expected=assertion.value, actual=None, message=f"Assertion could not be evaluated: {type(e).__name__}",
+            ))
+
+    # A schema supplied by a test case is itself an assertion, even when the
+    # generator did not emit a redundant explicit schema assertion.
+    if response_schema and not any(item.assertion.type == "schema" for item in results):
+        schema_assertion = Assertion(type="schema", path="$", operator="valid", value=True)
+        results.append(_build_result(schema_assertion, status_code, headers, body, response_schema, duration_ms))
 
     return results
+
+
+def _assertion_name(assertion: Assertion) -> str:
+    if assertion.type == "status_code":
+        return "Response status matches expected outcome"
+    if assertion.type == "header":
+        return f"Response header {assertion.path}"
+    if assertion.type == "json_path":
+        return f"Response value at {assertion.path}"
+    if assertion.type == "schema":
+        return "Response matches documented schema"
+    if assertion.type == "response_time":
+        return "Response time constraint"
+    return assertion.type
+
+
+def _actual_value(assertion: Assertion, status_code: int, headers: dict, body: str | None, duration_ms: int | None) -> Any:
+    if assertion.type == "status_code":
+        return status_code
+    if assertion.type == "header":
+        return headers.get(assertion.path.lower())
+    if assertion.type == "response_time":
+        return duration_ms
+    if assertion.type == "json_path" and body:
+        try:
+            matches = [match.value for match in jsonpath_parse(assertion.path).find(json.loads(body))]
+            return matches[0] if len(matches) == 1 else matches
+        except Exception:
+            return None
+    return None
+
+
+def _build_result(assertion: Assertion, status_code: int, headers: dict, body: str | None, response_schema: dict | None, duration_ms: int | None) -> AssertionResult:
+    actual = _actual_value(assertion, status_code, headers, body, duration_ms)
+    passed = _evaluate_single_assertion(assertion, status_code, headers, body, response_schema, duration_ms)
+    message = None if passed else f"Expected {assertion.operator} {assertion.value!r}; received {actual!r}."
+    if assertion.type == "schema" and not passed:
+        message = "The response body did not validate against the documented response schema."
+    return AssertionResult(
+        assertion=assertion, result=passed, name=_assertion_name(assertion), assertion_type=assertion.type,
+        path=assertion.path, operator=assertion.operator, expected=assertion.value,
+        actual=actual, message=message, evidence={"status_code": status_code, "duration_ms": duration_ms},
+    )
 
 
 def _evaluate_single_assertion(

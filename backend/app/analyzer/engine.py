@@ -105,6 +105,8 @@ class ResultAnalyzer:
 Schema:
 {
   "risk_level": "low|medium|high|critical",
+  "verdict": "real_bug|test_bug|spec_drift|flaky|environment|ok",
+  "owasp_category": "API1:2023 through API10:2023, or null",
   "summary": "string",
   "findings": [{"type": "security|functional|performance", "description": "string", "evidence": "string"}],
   "recommendations": ["string"],
@@ -121,8 +123,7 @@ Response Status: {result.response.status_code}
 Response Headers: {result.response.headers}
 Response Body: {result.response.body}
 Duration: {result.response.duration_ms}ms
-Assertions: {json.dumps([a.assertion.model_dump() for a in result.assertions])}
-Assertion Results: {[a.result for a in result.assertions]}
+Assertions: {json.dumps([a.model_dump() for a in result.assertions], default=str)}
 
 Provide risk assessment following the schema."""
 
@@ -135,6 +136,8 @@ Provide risk assessment following the schema."""
                 findings=data.get("findings", []),
                 recommendations=data.get("recommendations", []),
                 false_positive_likelihood=data.get("false_positive_likelihood", 0.1),
+                verdict=data.get("verdict"),
+                owasp_category=data.get("owasp_category"),
             )
         except json.JSONDecodeError:
             return LLMAnalysis(

@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.db.mongo import get_collection
 from app.db.repositories import generation_unit_repository
 from app.generators.functional import EdgeGenerator, FunctionalGenerator, MalformedGenerator, SecurityGenerator
+from app.generators.deterministic import DeterministicGenerator
 from app.parsers import extract_endpoints
 
 logger = structlog.get_logger()
@@ -28,13 +29,14 @@ class GenerationOrchestrator:
             "malformed": MalformedGenerator(self.ai_orchestrator),
             "security": SecurityGenerator(self.ai_orchestrator),
         }
+        self.deterministic = DeterministicGenerator()
 
     async def generate_for_spec(
         self,
         spec_id: str,
         user_id: str,
         categories: list[str],
-        prompt_version: str = "v1",
+        prompt_version: str = "v2",
         dry_run: bool = False,
         model: str | None = None,
         progress_callback: Callable[..., Awaitable[None]] | None = None,
@@ -61,6 +63,9 @@ class GenerationOrchestrator:
         units = []
         for endpoint_id, category in requested:
             generator = self.generators[category]
+            deterministic_cases = self.deterministic.generate(
+                spec_id=spec_obj_id, endpoint=endpoint, category=category, subcategory=subcategory
+            )
             plan_item = next((item for item in plan_units if item.get("endpoint_id") == endpoint_id), {})
             planned_subcats = plan_item.get("subcategories") or []
             subcategories = planned_subcats or (generator.SUBCATEGORIES if (session_id and self._intensity(session_id) == "aggressive") else ["all"])
@@ -135,10 +140,11 @@ class GenerationOrchestrator:
                             if unit:
                                 await generation_unit_repository.finish(ObjectId(unit_id), status="cancelled", error="Session cancelled")
                             raise asyncio.CancelledError
-                        test_cases = await call_task
+                        test_cases = deterministic_cases + await call_task
                     if subcategory != "all":
                         for testcase in test_cases:
                             testcase.subcategory = subcategory
+                    # Keep contract-derived cases even if an LLM returns too many additions.
                     test_cases = test_cases[: self.settings.max_tests_per_call]
                     for testcase in test_cases:
                         testcase.session_id = session_id

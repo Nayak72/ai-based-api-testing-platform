@@ -31,6 +31,10 @@
         <div class="value">{{ summary.skipped }}</div>
         <div class="label">Skipped</div>
     </div>
+    <div class="summary-card blocked">
+        <div class="value">{{ summary.blocked }}</div>
+        <div class="label">Blocked</div>
+    </div>
     <div class="summary-card duration">
         <div class="value">{{ "%.1f"|format(summary.duration_seconds) }}s</div>
         <div class="label">Duration</div>
@@ -38,12 +42,39 @@
 </div>
 
 <div class="section">
+    <h2>Result Storage Integrity</h2>
+    <p><strong>Status:</strong> {{ result_integrity.status|replace('_', ' ')|title }}</p>
+    <p>Selected: {{ result_integrity.selected_count }} · Executed: {{ result_integrity.executed_count }} · Persisted: {{ result_integrity.persisted_count }} · Summary: {{ result_integrity.summary_count }}</p>
+    {% if result_integrity.last_error %}<p><strong>Last persistence error:</strong> {{ result_integrity.last_error }}</p>{% endif %}
+</div>
+
+<div class="section">
     <h2>Pass Rate: {{ "%.1f"|format(summary.pass_rate) }}%</h2>
+</div>
+
+<div class="section">
+    <h2>OWASP API Security Top 10 (2023) Coverage</h2>
+    <table class="results-table">
+        <thead><tr><th>Category</th><th>Assessment</th><th>Generated</th><th>Executed</th><th>Evidence</th></tr></thead>
+        <tbody>
+        {% for item in owasp_coverage %}
+            <tr>
+                <td>{{ item.id }} — {{ item.name }}</td>
+                <td>{{ item.assessment|replace('_', ' ')|title }}</td>
+                <td>{{ item.generated_test_cases }}</td>
+                <td>{{ item.executed_test_cases }}</td>
+                <td>{% if item.not_assessed_reason %}{{ item.not_assessed_reason }}{% else %}{{ item.evidence_result_ids|length }} result(s){% endif %}</td>
+            </tr>
+        {% else %}
+            <tr><td colspan="5">No OWASP coverage was generated for this run.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 {% for category, data in results_by_category.items() %}
 <div class="section">
-    <h2>{{ category|title }} Tests ({{ data.passed }} passed, {{ data.failed }} failed, {{ data.errors }} errors)</h2>
+    <h2>{{ category|title }} Tests ({{ data.passed }} passed, {{ data.failed }} failed, {{ data.errors }} errors, {{ data.blocked }} blocked)</h2>
     <table class="results-table">
         <thead>
             <tr>
@@ -98,9 +129,11 @@
             {% endif %}
             {% if result.assertions %}
             <strong>Assertions:</strong>
-            <pre>{{ result.assertions | map(attribute='assertion') | map('model_dump') | list | tojson(indent=2) }}</pre>
-            <strong>Results:</strong>
-            <pre>{{ result.assertions | map(attribute='result') | list | tojson(indent=2) }}</pre>
+            <ul>
+            {% for assertion in result.assertions %}
+                <li><strong>{{ assertion.name or assertion.assertion.type }}</strong>: {{ 'passed' if assertion.result else 'failed' }}{% if assertion.message %} — {{ assertion.message }}{% endif %}</li>
+            {% endfor %}
+            </ul>
             {% endif %}
             {% if result.llm_analysis %}
             <strong>LLM Analysis:</strong>

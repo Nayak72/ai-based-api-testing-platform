@@ -119,7 +119,9 @@ class BaseGenerator(ABC):
                         content_type=request_data.get("content_type"),
                     ),
                     expected=ExpectedResponse(
-                        status_code=int(expected_data.get("status_code") or 200),
+                        status_code=cls._expected_status_code(
+                            expected_data.get("status_code"), category, subcat, method
+                        ),
                         response_schema=expected_data.get("response_schema") or expected_data.get("schema"),
                         assertions=assertions,
                     ),
@@ -138,6 +140,26 @@ class BaseGenerator(ABC):
         if not test_cases:
             raise ValueError("Generator response contained no valid test cases")
         return test_cases
+
+    @staticmethod
+    def _expected_status_code(value: object, category: str, subcategory: str, method: str) -> int:
+        """Use scenario semantics for incomplete LLM output, never a blanket 200."""
+        if value is not None:
+            return int(value)
+        invalid_input = category in {"malformed", "edge"} or subcategory in {
+            "broken_auth", "bola", "bopla", "bfla", "ssrf"
+        }
+        if subcategory == "broken_auth":
+            return 401
+        if subcategory in {"bola", "bopla", "bfla"}:
+            return 403
+        if invalid_input:
+            return 400
+        if method == "POST":
+            return 201
+        if method == "DELETE":
+            return 204
+        return 200
 
     def _compute_request_hash(self, request: dict) -> str:
         normalized = json.dumps(request, sort_keys=True, separators=(",", ":"))

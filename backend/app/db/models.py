@@ -286,6 +286,32 @@ class RunSummary(BaseModel):
     duration_seconds: float = 0.0
 
 
+class ResultStorageIntegrity(BaseModel):
+    """Durable reconciliation between dispatched work and test_results."""
+    status: Literal["valid", "inconsistent", "partially_persisted", "failed"] = "valid"
+    selected_count: int = 0
+    executed_count: int = 0
+    persisted_count: int = 0
+    summary_count: int = 0
+    last_error: str | None = None
+    reconciled_at: datetime | None = None
+
+
+class OwaspCoverageAssessment(BaseModel):
+    """Evidence-backed OWASP API Security Top 10 coverage for one run."""
+    id: str
+    name: str
+    assessment: Literal["assessed", "partially_assessed", "not_assessed", "blocked_by_execution_policy"]
+    applicable_endpoints: list[str] = Field(default_factory=list)
+    generated_test_cases: int = 0
+    executed_test_cases: int = 0
+    passed_checks: int = 0
+    failed_checks: int = 0
+    blocked_checks: int = 0
+    not_assessed_reason: str | None = None
+    evidence_result_ids: list[str] = Field(default_factory=list)
+
+
 class TestRunBase(BaseModel):
     __test__ = False
     spec_id: PyObjectId
@@ -305,6 +331,8 @@ class TestRunInDB(TestRunBase):
     user_id: PyObjectId
     status: str = "pending"
     summary: RunSummary = Field(default_factory=RunSummary)
+    result_integrity: ResultStorageIntegrity = Field(default_factory=ResultStorageIntegrity)
+    owasp_coverage: list[OwaspCoverageAssessment] = Field(default_factory=list)
     started_at: datetime | None = None
     completed_at: datetime | None = None
     analysis_status: str | None = None
@@ -338,6 +366,14 @@ class ResponseReceived(BaseModel):
 class AssertionResult(BaseModel):
     assertion: Assertion
     result: bool
+    name: str | None = None
+    assertion_type: str | None = None
+    path: str | None = None
+    operator: str | None = None
+    expected: Any | None = None
+    actual: Any | None = None
+    message: str | None = None
+    evidence: Any | None = None
 
 
 class LLMAnalysis(BaseModel):

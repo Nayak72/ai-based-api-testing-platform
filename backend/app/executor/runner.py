@@ -1,14 +1,28 @@
 import asyncio
+from datetime import UTC, datetime
 
 import structlog
 from bson import ObjectId
 
 from app.config import get_settings
-from app.db.models import AuthConfig, RunConfig, TestCaseInDB
+from app.db.models import AuthConfig, RunConfig, RunSummary, TestCaseInDB
 from app.db.repositories import result_repository, run_repository, test_case_repository
 from app.executor.engine import TestExecutor
 
 logger = structlog.get_logger()
+
+OWASP_API_TOP_10 = {
+    "API1:2023": "Broken Object Level Authorization",
+    "API2:2023": "Broken Authentication",
+    "API3:2023": "Broken Object Property Level Authorization",
+    "API4:2023": "Unrestricted Resource Consumption",
+    "API5:2023": "Broken Function Level Authorization",
+    "API6:2023": "Unrestricted Access to Sensitive Business Flows",
+    "API7:2023": "Server Side Request Forgery",
+    "API8:2023": "Security Misconfiguration",
+    "API9:2023": "Improper Inventory Management",
+    "API10:2023": "Unsafe Consumption of APIs",
+}
 
 
 class RunContext:
@@ -131,6 +145,7 @@ class RunOrchestrator:
                 tc for tc in test_cases
                 if tc.category in run.config.categories and (not scoped_ids or str(tc.id) in scoped_ids)
             ]
+            selected_cases = list(filtered_cases)
             # A resumed run reuses durable results and dispatches only cases that
             # have not already produced a result.
             existing = await result_repository.list_by_run(run_obj_id, limit=10000)
@@ -153,7 +168,8 @@ class RunOrchestrator:
                     run_id=run_id,
                     max_total_requests=run.config.max_total_requests,
                 )
-            logger.info("Starting test execution", run_id=run_id, total_cases=len(filtered_cases))
+            selected_count = len(filtered_cases) + len(completed_case_ids)
+            logger.info("Starting test execution", run_id=run_id, selected_cases=selected_count, dispatch_count=len(filtered_cases))
 
             tasks = []
             for tc in filtered_cases:
@@ -165,7 +181,8 @@ class RunOrchestrator:
                 tasks.append(task)
 
             passed = failed = errors = skipped = blocked = 0
-            done = 0
+            executed_count = persistence_errors = 0
+            last_persistence_error = None
 
             for task in asyncio.as_completed(tasks):
                 if context.is_cancelled() or (cancel_token and await cancel_token.cancelled()):
@@ -174,10 +191,33 @@ class RunOrchestrator:
                 try:
                     result = await task
                     context.remove_task(str(result.test_case_id))
+                    executed_count += 1
 
                     # Persist each result immediately
-                    await result_repository.create(result)
-                    done += 1
+                    try:
+                        persisted = await result_repository.create(result)
+                        logger.info(
+                            "Execution result persisted",
+                            run_id=run_id,
+                            test_case_id=str(result.test_case_id),
+                            outcome=result.status,
+                            database=get_settings().mongodb_db,
+                            collection="test_results",
+                            result_id=str(persisted.id),
+                        )
+                    except Exception as exc:
+                        persistence_errors += 1
+                        last_persistence_error = type(exc).__name__
+                        logger.exception(
+                            "Execution result persistence failed",
+                            run_id=run_id,
+                            test_case_id=str(result.test_case_id),
+                            outcome=result.status,
+                            database=get_settings().mongodb_db,
+                            collection="test_results",
+                            error_type=type(exc).__name__,
+                        )
+                        continue
 
                     # Update summary counters atomically
                     if result.status == "passed":
@@ -196,19 +236,72 @@ class RunOrchestrator:
                         blocked += 1
                         await run_repository.increment_summary(run_obj_id, "blocked", 1)
                     if progress_callback:
-                        await progress_callback(done, len(filtered_cases), {"passed": passed, "failed": failed, "errors": errors, "skipped": skipped, "blocked": blocked})
+                        await progress_callback(executed_count, len(filtered_cases), {"passed": passed, "failed": failed, "errors": errors, "skipped": skipped, "blocked": blocked})
 
                 except Exception as e:
                     logger.error("Test execution exception", error=str(e))
                     errors += 1
                     await run_repository.increment_summary(run_obj_id, "errors", 1)
 
-            total = passed + failed + errors + skipped + blocked
-            if total:
-                await run_repository.increment_summary(run_obj_id, "total", total)
+            persisted_results = await result_repository.list_by_run(run_obj_id, limit=10000)
+            persisted_count = len(persisted_results)
+            reconciled = RunSummary(
+                total=persisted_count,
+                passed=sum(r.status == "passed" for r in persisted_results),
+                failed=sum(r.status == "failed" for r in persisted_results),
+                errors=sum(r.status == "error" for r in persisted_results),
+                skipped=sum(r.status == "skipped" for r in persisted_results),
+                blocked=sum(r.status == "blocked" for r in persisted_results),
+            )
+            completed_at = datetime.now(UTC)
+            run_after_execution = await run_repository.get_by_id(run_obj_id, user_obj_id)
+            if run_after_execution and run_after_execution.started_at:
+                reconciled.duration_seconds = max(0.0, (completed_at - run_after_execution.started_at).total_seconds())
+            await run_repository.replace_summary(run_obj_id, reconciled)
+            await run_repository.reconcile_results(
+                run_obj_id,
+                selected_count=selected_count,
+                executed_count=executed_count + len(completed_case_ids),
+                persisted_count=persisted_count,
+                summary_count=reconciled.total,
+                insertion_errors=persistence_errors,
+                last_error=last_persistence_error,
+            )
+            coverage = []
+            for category_id, category_name in OWASP_API_TOP_10.items():
+                applicable = [case for case in selected_cases if case.metadata.owasp_category == category_id]
+                applicable_ids = {str(case.id) for case in applicable}
+                executed = [result for result in persisted_results if str(result.test_case_id) in applicable_ids]
+                if not applicable:
+                    assessment = "not_assessed"
+                    reason = "No applicable generated security test case in this run scope."
+                elif not executed:
+                    assessment = "not_assessed"
+                    reason = "Applicable tests were not persisted after execution."
+                elif all(result.status == "blocked" for result in executed):
+                    assessment = "blocked_by_execution_policy"
+                    reason = "All applicable tests were blocked by execution policy."
+                elif len(executed) < len(applicable):
+                    assessment = "partially_assessed"
+                    reason = "Only a subset of applicable tests produced persisted evidence."
+                else:
+                    assessment = "assessed"
+                    reason = None
+                coverage.append({
+                    "id": category_id, "name": category_name, "assessment": assessment,
+                    "applicable_endpoints": sorted({case.endpoint_id for case in applicable}),
+                    "generated_test_cases": len(applicable), "executed_test_cases": len(executed),
+                    "passed_checks": sum(result.status == "passed" for result in executed),
+                    "failed_checks": sum(result.status == "failed" for result in executed),
+                    "blocked_checks": sum(result.status == "blocked" for result in executed),
+                    "not_assessed_reason": reason,
+                    "evidence_result_ids": [str(result.id) for result in executed],
+                })
+            await run_repository.collection.update_one({"_id": run_obj_id}, {"$set": {"owasp_coverage": coverage}})
+            logger.info("Execution reconciliation", run_id=run_id, selected=selected_count, executed=executed_count + len(completed_case_ids), persisted=persisted_count, summary=reconciled.total, persistence_errors=persistence_errors, database=get_settings().mongodb_db, collection="test_results")
 
             final_status = (
-                "cancelled" if context.is_cancelled() or (cancel_token and await cancel_token.cancelled()) else ("completed_with_errors" if errors > 0 else "completed")
+                "cancelled" if context.is_cancelled() or (cancel_token and await cancel_token.cancelled()) else ("completed_with_errors" if errors > 0 or persistence_errors > 0 else "completed")
             )
             await run_repository.update_status(run_obj_id, final_status)
             await run_repository.update_completed_at(run_obj_id)
@@ -221,6 +314,8 @@ class RunOrchestrator:
                 errors=errors,
                 skipped=skipped,
                 blocked=blocked,
+                persisted=persisted_count,
+                persistence_errors=persistence_errors,
             )
 
         except Exception as e:
@@ -282,18 +377,44 @@ class RunOrchestrator:
                 context.add_task(str(tc.id), task)
                 tasks.append(task)
 
+            retry_write_errors = 0
             for task in asyncio.as_completed(tasks):
                 try:
                     result = await task
                     existing_res = next(r for r in all_failed if r.test_case_id == result.test_case_id)
 
-                    await result_repository.update_status(existing_res.id, result.status)
-                    if result.llm_analysis:
-                        await result_repository.update_analysis(existing_res.id, result.llm_analysis.model_dump())
+                    replaced = await result_repository.replace_execution(
+                        existing_res.id, result, attempt=existing_res.attempt + 1
+                    )
+                    if not replaced:
+                        retry_write_errors += 1
+                        logger.error("Retry result was not persisted", result_id=str(existing_res.id))
                 except Exception as e:
-                    logger.error("Retry execution exception", error=str(e))
+                    retry_write_errors += 1
+                    logger.exception("Retry execution exception", run_id=str(run_id), error_type=type(e).__name__)
 
-            await run_repository.update_status(run_id, "completed")
+            persisted_results = await result_repository.list_by_run(run_id, limit=10000)
+            summary = RunSummary(
+                total=len(persisted_results),
+                passed=sum(result.status == "passed" for result in persisted_results),
+                failed=sum(result.status == "failed" for result in persisted_results),
+                errors=sum(result.status == "error" for result in persisted_results),
+                skipped=sum(result.status == "skipped" for result in persisted_results),
+                blocked=sum(result.status == "blocked" for result in persisted_results),
+            )
+            await run_repository.replace_summary(run_id, summary)
+            await run_repository.reconcile_results(
+                run_id,
+                selected_count=summary.total,
+                executed_count=summary.total,
+                persisted_count=summary.total,
+                summary_count=summary.total,
+                insertion_errors=retry_write_errors,
+                last_error="retry persistence failure" if retry_write_errors else None,
+            )
+            await run_repository.update_status(
+                run_id, "completed_with_errors" if summary.errors or retry_write_errors else "completed"
+            )
 
         finally:
             await executor.close()

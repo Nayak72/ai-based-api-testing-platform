@@ -46,9 +46,10 @@ export function RunResultDetail() {
         <CardHeader><CardTitle>Assertions</CardTitle><CardDescription>{result.assertions.length} checks</CardDescription></CardHeader>
         <CardContent className="space-y-2">
           {result.assertions.length === 0 ? <p className="text-sm text-zinc-500">No assertions were recorded.</p> : result.assertions.map((item, index) => (
-            <div key={`${index}-${item.assertion?.type ?? 'assertion'}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-              <code className="break-all text-sm">{JSON.stringify(item.assertion)}</code>
-              <StatusBadge status={item.result ? 'passed' : 'failed'} />
+            <div key={`${index}-${item.assertion?.type ?? 'assertion'}`} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+              <div className="flex flex-wrap items-center justify-between gap-3"><p className="font-medium text-[var(--app-text)]">{item.name || item.assertion?.type || 'Assertion'}</p><StatusBadge status={item.result ? 'passed' : 'failed'} /></div>
+              <div className="mt-2 grid gap-2 text-xs text-[var(--app-text-muted)] sm:grid-cols-2"><p><span className="font-medium">Path:</span> <code>{item.path || item.assertion?.path || '—'}</code></p><p><span className="font-medium">Operator:</span> {item.operator || item.assertion?.operator || '—'}</p><p><span className="font-medium">Expected:</span> <code>{JSON.stringify(item.expected ?? item.assertion?.value)}</code></p><p><span className="font-medium">Actual:</span> <code>{JSON.stringify(item.actual)}</code></p></div>
+              {item.message && <p className="mt-2 text-sm text-[#c65c65]">{item.message}</p>}
             </div>
           ))}
         </CardContent>

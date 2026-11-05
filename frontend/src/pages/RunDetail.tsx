@@ -34,7 +34,7 @@ export function RunDetail() {
   const { isPolling } = usePolling(runData?.data.status === 'running' || runData?.data.status === 'pending' ? runId! : null, {
     enabled: runData?.data.status === 'running' || runData?.data.status === 'pending',
     onStatusChange: (status) => {
-      if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+      if (status === 'completed' || status === 'completed_with_errors' || status === 'failed' || status === 'cancelled') {
         refetchRun()
         refetchResults()
       }
@@ -125,7 +125,7 @@ export function RunDetail() {
   }
 
   const canCancel = run.status === 'running' || run.status === 'pending'
-  const canRetry = run.status === 'completed' || run.status === 'failed'
+  const canRetry = run.status === 'completed' || run.status === 'completed_with_errors' || run.status === 'failed' || run.status === 'cancelled'
   const canAnalyze = run.status === 'completed' || run.status === 'completed_with_errors'
   const canReport = canAnalyze
 
@@ -188,6 +188,32 @@ export function RunDetail() {
         </Card>
       </div>
 
+      {run.owasp_coverage?.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>OWASP API Security Top 10 (2023) coverage</CardTitle>
+            <CardDescription>Coverage is based only on generated cases and persisted execution evidence from this run.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {run.owasp_coverage.map((item) => (
+                <div key={item.id} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/60">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.id}</p>
+                    <Badge variant={item.assessment === 'assessed' ? 'success' : item.assessment === 'partially_assessed' ? 'warning' : 'gray'} size="sm">
+                      {item.assessment.replaceAll('_', ' ')}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{item.name}</p>
+                  <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{item.executed_test_cases}/{item.generated_test_cases} executed · {item.evidence_result_ids.length} evidence item(s)</p>
+                  {item.not_assessed_reason && <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{item.not_assessed_reason}</p>}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card>
@@ -226,9 +252,12 @@ export function RunDetail() {
                   Analysis failed: {run.analysis_error || 'Check backend logs, then try Analyze again.'}
                 </div>
               )}
-              {(resultsData?.data.total ?? 0) === 0 && run.summary.total > 0 && (
+              {(run.result_integrity?.status !== 'valid' || ((resultsData?.data.total ?? 0) === 0 && run.summary.total > 0)) && (
                 <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" role="alert">
-                  This run summary reports {run.summary.total} tests, but the API returned no saved result records. Analysis and result details require those records; check the backend logs and confirm the frontend and backend are using the same MongoDB database.
+                  <p className="font-semibold">Result storage needs attention</p>
+                  <p className="mt-1">Selected: {run.result_integrity?.selected_count ?? '—'} · Executed: {run.result_integrity?.executed_count ?? '—'} · Persisted: {run.result_integrity?.persisted_count ?? resultsData?.data.total ?? 0} · Summary: {run.result_integrity?.summary_count ?? run.summary.total}</p>
+                  <p className="mt-1">Status: {run.result_integrity?.status?.replace('_', ' ') ?? 'inconsistent'}{run.result_integrity?.last_error ? ` (${run.result_integrity.last_error})` : ''}.</p>
+                  <Button className="mt-3" size="sm" variant="secondary" onClick={() => { void refetchRun(); void refetchResults() }}>Refresh results</Button>
                 </div>
               )}
               {resultsLoading ? (
@@ -249,6 +278,7 @@ export function RunDetail() {
                       <option value="passed">Passed</option>
                       <option value="failed">Failed</option>
                       <option value="error">Error</option>
+                      <option value="blocked">Blocked</option>
                       <option value="skipped">Skipped</option>
                     </select>
                     <select

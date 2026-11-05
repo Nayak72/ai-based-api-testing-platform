@@ -39,7 +39,7 @@ class TestCaseGenerateRequest(BaseModel):
     __test__ = False
     model_config = ConfigDict(extra="forbid")
     categories: list[str] | None = None
-    prompt_version: str = "v1"
+    prompt_version: str = "v2"
     dry_run: bool = False
 
 
