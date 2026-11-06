@@ -64,3 +64,31 @@
 @keyframes pageIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes modalIn { from { opacity: 0; transform: translateY(6px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @media (min-width: 640px) { .page-header { flex-direction: row; align-items: flex-end; justify-content: space-between; } }
+
+/* Dark-mode contrast guardrails for legacy utility classes. These keep
+   selectable controls readable when a component has only a light-mode token. */
+.dark .bg-white { background-color: var(--app-surface) !important; }
+.dark .bg-zinc-50 { background-color: var(--app-surface-muted) !important; }
+.dark .bg-zinc-100 { background-color: var(--app-surface-muted) !important; }
+.dark .bg-brand-50 { background-color: var(--app-accent-soft) !important; }
+.dark .bg-brand-100 { background-color: var(--app-accent-soft) !important; }
+.dark .text-zinc-400 { color: var(--app-text-muted) !important; }
+.dark .text-zinc-500 { color: var(--app-text-muted) !important; }
+.dark .text-zinc-600 { color: #c3cad5 !important; }
+.dark .text-zinc-700 { color: #d8dde5 !important; }
+.dark .text-brand-600 { color: var(--app-accent) !important; }
+.dark .text-brand-700 { color: #c5cafb !important; }
+.dark .border-zinc-200 { border-color: var(--app-border) !important; }
+.dark .border-zinc-300 { border-color: var(--app-border) !important; }
+.dark button[aria-checked="true"],
+.dark button[class*="bg-brand-50"] {
+  background-color: #303866 !important;
+  border-color: #8795ed !important;
+  color: #eef0ff !important;
+}
+.dark button[aria-checked="true"] .text-zinc-500,
+.dark button[aria-checked="true"] .text-zinc-600,
+.dark button[class*="bg-brand-50"] .text-zinc-500,
+.dark button[class*="bg-brand-50"] .text-zinc-600 {
+  color: #d8ddf5 !important;
+}
